@@ -1,0 +1,10 @@
+# Replace dates with a recent historical day at least five days behind real time.
+# This example is valid as a recent period on 1 October 2026.
+source: era5t
+name: era5t-uk-20260924
+start: "2026-09-24T12:00:00Z"
+end: "2026-09-25T00:00:00Z"
+area: [60, -12, 48, 5]
+grid: 0.25
+surface: true
+refresh: false

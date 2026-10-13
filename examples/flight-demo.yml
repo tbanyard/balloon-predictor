@@ -1,0 +1,15 @@
+dataset: demo
+launch_datetime: "2024-01-15T12:00:00Z"
+launch_latitude: 52.817208
+launch_longitude: -4.125
+launch_altitude: 100
+ascent_rate: 5
+burst_altitude: 25000
+descent_rate: 5
+descent_model: density
+landing_mode: terrain
+use_vertical_wind: false
+time_step: 10
+max_duration_hours: 12
+ensemble_members: 5
+seed: 42

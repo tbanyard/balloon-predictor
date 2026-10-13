@@ -1,0 +1,8 @@
+source: era5
+name: era5-uk-20240115
+start: "2024-01-15T12:00:00Z"
+end: "2024-01-16T00:00:00Z"
+area: [60, -12, 48, 5]
+grid: 0.25
+surface: true
+refresh: false

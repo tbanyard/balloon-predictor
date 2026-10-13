@@ -1,0 +1,2 @@
+# Run inside the extracted project directory.
+-e .[weather]

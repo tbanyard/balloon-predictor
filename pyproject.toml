@@ -1,0 +1,33 @@
+[build-system]
+requires = ["setuptools>=77", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "balloon-predictor-local"
+version = "1.1.0"
+description = "Local balloon trajectories with ERA5, ERA5T, ECMWF operational forecasts and native WRF output"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+  "numpy>=1.26,<3", "scipy>=1.11,<2", "xarray>=2024.7,<2027", "netCDF4>=1.7,<2",
+  "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic>=2.9,<3", "PyYAML>=6,<7",
+  "python-dotenv>=1,<2", "filelock>=3.15,<4"
+]
+
+[project.optional-dependencies]
+weather = ["cdsapi>=0.7.7,<1", "ecmwf-opendata>=0.3.34,<1", "eccodes>=2.42,<3"]
+dev = ["pytest>=8,<10", "httpx>=0.27,<1"]
+
+[project.scripts]
+balloon-predictor = "balloon_predictor.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["balloon_predictor*"]
+
+[tool.setuptools.package-data]
+"balloon_predictor.weather.era5_native" = ["l137.csv", "LICENSE.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+filterwarnings = ["ignore:numpy.ndarray size changed:RuntimeWarning"]

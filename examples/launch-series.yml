@@ -1,0 +1,23 @@
+# 24 hourly launches at each of two independent launch points.
+# Window includes the first time and excludes the time exactly 24 h later.
+duration_hours: 24
+interval_hours: 1
+flights:
+  - dataset: era5
+    flight_name: Aberystwyth
+    launch_datetime: '2016-09-25T06:00:00Z'
+    launch_latitude: 52.417
+    launch_longitude: -4.083
+    launch_altitude: 100
+    flight_mode: ascent
+    burst_altitude: 25000
+    ascent_rate: 5
+  - dataset: era5
+    flight_name: Inland comparison
+    launch_datetime: '2016-09-25T06:00:00Z'
+    launch_latitude: 52.8
+    launch_longitude: -3.4
+    launch_altitude: 400
+    flight_mode: ascent
+    burst_altitude: 25000
+    ascent_rate: 5

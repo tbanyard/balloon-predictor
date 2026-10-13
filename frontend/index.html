@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BalloonPredictor v1.1</title>
+  <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="/assets/style.css">
+  <script src="/assets/vendor/leaflet/leaflet.js" defer></script>
+  <script src="/assets/coastlines.js" defer></script>
+  <script src="/assets/plots.js" defer></script>
+  <script src="/assets/app.js" defer></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><svg width="30" height="35" viewBox="0 0 30 35" aria-hidden="true"><path d="M15 2C7 2 3 8 5 15c1 5 6 9 8 12h4c2-3 7-7 8-12C27 8 23 2 15 2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 5c-4 8 0 15 5 22m5-22c4 8 0 15-5 22M12 31h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Balloon<strong>Predictor</strong><span class="version">v1.1</span><small>ATMOSPHERIC FLIGHT LAB</small></span></div>
+    <div class="header-right"><span class="local-indicator"><i></i> Local workspace</span><button id="weather-open" class="button quiet">Manage weather <span>↗</span></button><a class="api-link" href="/docs" target="_blank" rel="noopener">API</a></div>
+  </header>
+  <main class="workspace">
+    <aside class="sidebar">
+      <div class="sidebar-heading"><span class="eyebrow">01 / FLIGHT SETUP</span><h1>Follow the wind.</h1><p>Choose your atmosphere. Trace your flight.</p></div>
+      <form id="flight-form">
+        <div class="field weather-field"><label for="dataset">Weather dataset</label><select id="dataset" name="dataset"><option value="era5">ERA5 · local model-level archive</option></select><div id="coverage" class="field-note">Looking for your local ERA5 archive…</div></div>
+        <div class="launch-controls"><label for="flight_name">Launch point name</label><input id="flight_name" maxlength="60" value="Launch 1"><div class="launch-actions"><button type="button" class="text-button" id="add-flight">+ Add launch point</button><button type="button" class="text-button" id="duplicate-flight">Duplicate</button><button type="button" class="text-button" id="remove-flight">Remove</button></div></div>
+        <div class="section-heading"><h2>Launch</h2><button type="button" id="map-hint" class="text-button">Click map to place ↗</button></div>
+        <div class="field"><label for="launch_datetime">Launch date &amp; time <span>UTC</span></label><input id="launch_datetime" name="launch_datetime" type="datetime-local" step="1" required></div>
+        <div class="field" id="available-days-field" hidden><label for="available-day">Available date <span>Local files</span></label><select id="available-day"></select><p id="available-times" class="field-note"></p></div>
+        <div class="two-columns">
+          <div class="field"><label for="launch_latitude">Latitude <span>°N</span></label><input id="launch_latitude" name="launch_latitude" type="number" step="any" min="-85" max="85" value="52.817208" required></div>
+          <div class="field"><label for="launch_longitude">Longitude <span>°E</span></label><input id="launch_longitude" name="launch_longitude" type="number" step="any" min="-180" max="360" value="-4.125" required></div>
+        </div>
+        <div class="field"><label for="launch_altitude">Launch altitude <span>m AMSL</span></label><div class="input-action"><input id="launch_altitude" name="launch_altitude" type="number" min="-500" max="55000" value="100" required><button id="ground-button" type="button" title="Set launch altitude to model ground + 1 m">Use ground</button></div></div>
+        <div class="field"><label for="flight_mode">Flight endpoint</label><select id="flight_mode"><option value="full">Burst, descend &amp; land</option><option value="ascent">Stop at target / burst altitude</option></select><p class="field-note">Ascent-only runs stop at the exact requested altitude.</p></div>
+        <div class="section-heading"><h2>Balloon &amp; parachute</h2><span class="muted">Altitude above sea level</span></div>
+        <div class="two-columns">
+          <div class="field"><label for="ascent_rate">Ascent <span>m/s</span></label><input id="ascent_rate" name="ascent_rate" type="number" min="0.05" max="30" step="0.1" value="5" required></div>
+          <div class="field"><label for="descent_rate">Descent at sea level <span>m/s</span></label><input id="descent_rate" name="descent_rate" type="number" min="0.05" max="50" step="0.1" value="5" required></div>
+        </div>
+        <div class="field"><label for="burst_altitude"><span id="altitude-label">Burst altitude</span> <span>m AMSL</span></label><input id="burst_altitude" name="burst_altitude" type="number" min="1" max="55000" step="100" value="25000" required></div>
+        <details class="advanced"><summary>Physics &amp; sensitivity <span>+</span></summary>
+          <div class="field"><label for="descent_model">Descent model</label><select id="descent_model"><option value="density">Density-scaled parachute speed</option><option value="constant">Constant vertical speed</option></select></div>
+          <div class="field"><label for="landing_mode">Landing surface</label><select id="landing_mode"><option value="terrain">Weather model terrain</option><option value="fixed">Fixed altitude</option></select></div>
+          <div class="field" id="landing-field" hidden><label for="landing_altitude">Landing altitude <span>m AMSL</span></label><input id="landing_altitude" type="number" value="0" min="-500" max="10000"></div>
+          <label class="check-field"><input id="use_vertical_wind" type="checkbox"> Include atmospheric vertical wind</label>
+          <div class="two-columns"><div class="field"><label for="time_step">Time step <span>s</span></label><input id="time_step" type="number" min="1" max="60" value="10"></div><div class="field"><label for="max_duration_hours">Maximum flight <span>h</span></label><input id="max_duration_hours" type="number" min="0.1" max="48" step="0.5" value="12"></div></div>
+          <div class="field"><label for="ensemble_members">Sensitivity members <span>0–50</span></label><input id="ensemble_members" type="number" min="0" max="50" value="0"><p class="field-note">Parameter perturbations, not a forecast probability.</p></div>
+          <div class="two-columns"><div class="field"><label for="ascent_sigma">Ascent σ <span>m/s</span></label><input id="ascent_sigma" type="number" step="0.1" min="0" max="5" value="0.3"></div><div class="field"><label for="descent_sigma">Descent σ <span>m/s</span></label><input id="descent_sigma" type="number" step="0.1" min="0" max="5" value="0.3"></div></div>
+          <div class="two-columns"><div class="field"><label for="burst_sigma">Burst σ <span>m</span></label><input id="burst_sigma" type="number" min="0" max="5000" value="500"></div><div class="field"><label for="wind_sigma">Wind bias σ <span>m/s</span></label><input id="wind_sigma" type="number" step="0.1" min="0" max="10" value="0.5"></div></div>
+          <div class="field"><label for="seed">Random seed</label><input id="seed" type="number" min="0" max="4294967295" value="42"></div>
+        </details>
+        <details class="advanced schedule" id="schedule-details"><summary>Repeated launches <span>+</span></summary><div class="field"><label for="run_mode">Prediction schedule</label><select id="run_mode"><option value="single">One launch</option><option value="series">A series of launches</option></select></div><div id="schedule-fields" hidden><div class="two-columns"><div class="field"><label for="series_duration">Launch window <span>hours</span></label><input id="series_duration" type="number" min="0.25" max="168" step="0.25" value="24"></div><div class="field"><label for="series_interval">Every <span>hours</span></label><input id="series_interval" type="number" min="0.25" max="24" step="0.25" value="1"></div></div><div class="field"><label for="series_sites">Launch points</label><select id="series_sites"><option value="current">Current launch point</option><option value="all">All saved launch points</option></select></div><p id="schedule-note" class="field-note">24 hourly launches; the end of the window is excluded.</p></div></details>
+        <button id="predict-button" disabled type="submit" class="button primary predict-button"><span>Calculate flight</span><span aria-hidden="true">→</span></button>
+        <div id="flight-status" class="status-message" role="status" aria-live="polite">Ready to explore.</div>
+      </form>
+      <div class="sidebar-footer">ERA5 / ERA5T / ECMWF IFS / WRF<br>Independent experimental predictor · v1.1</div>
+    </aside>
+    <section class="visuals">
+      <div class="map-toolbar"><div class="map-heading"><span class="eyebrow">02 / TRAJECTORY</span><span id="model-badge" class="badge">ERA5 ARCHIVE</span></div><div class="map-actions"><label class="sr-only" for="track-display">Visible track stages</label><select id="track-display"><option value="both">Ascent + descent</option><option value="ascent">Ascent only</option></select><label class="sr-only" for="endpoint-focus">Endpoint comparison</label><select id="endpoint-focus"><option value="landing">Landing positions</option><option value="burst">Target / burst positions</option></select><button id="fit-button" class="text-button">Fit flight</button><button id="share-button" class="text-button">Copy setup link</button></div></div>
+      <div class="map-region"><div id="map" aria-label="Launch and predicted flight map"></div><div id="demo-notice" class="map-notice"><span class="notice-dot"></span> Synthetic demo — select real weather for a forecast.</div><div class="map-legend"><span><i class="ascent-line"></i>Ascent</span><span><i class="descent-line"></i>Descent</span><span><i class="member-dot"></i>Sensitivity endpoint</span></div></div>
+      <section id="sounding-panel" class="sounding-panel" hidden aria-label="Atmospheric sounding alongside map"><div class="sounding-heading"><div><span class="eyebrow">04 / SYNTHETIC RADIOSONDE</span><h2>The atmosphere along your flight.</h2></div><button id="sounding-close" class="close-button" aria-label="Close sounding">×</button></div><div class="sounding-controls"><label class="sr-only" for="sounding-mode">Sounding location</label><select id="sounding-mode"><option value="ascent">Along the predicted ascent</option><option value="launch">Fixed launch column</option></select><a id="sounding-popout" target="_blank" rel="noopener">Open in a separate window ↗</a><a id="sounding-csv">CSV ↓</a></div><p id="sounding-note" class="field-note"></p><div class="sounding-plots"><div><h3>Skew-T · log pressure</h3><svg id="skewt-chart" viewBox="0 0 520 500" role="img" aria-label="Skew-T temperature and dew point"></svg></div><div><h3>Wind components · AMSL</h3><svg id="uv-chart" viewBox="0 0 360 500" role="img" aria-label="Eastward u and northward v wind profiles"></svg></div></div><div class="sounding-legend"><span><i class="temp-key"></i>Temperature</span><span><i class="dew-key"></i>Dew point</span><span><i class="u-key"></i>u · eastward</span><span><i class="v-key"></i>v · northward</span></div></section>
+      <div class="result-panel">
+        <div class="result-header"><span class="eyebrow">03 / FLIGHT PROFILE</span><div id="exports" class="export-buttons" hidden><span>Export</span><a data-format="csv">CSV</a><a data-format="geojson">GeoJSON</a><a data-format="kml">KML</a><a data-format="json">JSON</a></div></div>
+        <div class="flight-tabs" id="flight-tabs" role="tablist" aria-label="Launch points"></div><div id="series-summary" class="series-summary" hidden></div><div id="series-launches" class="series-launches" hidden></div><div class="profile-actions"><button id="sounding-open" class="text-button" disabled>Open Skew-T &amp; u/v alongside ↗</button><button id="export-session" class="text-button">Save launch setups ↓</button><label class="text-button session-load" for="import-session">Load setups ↑<input id="import-session" type="file" accept="application/json,.json" hidden></label></div>
+        <div id="empty-result" class="empty-result"><div class="empty-icon">↗</div><div><h3>Your flight starts here.</h3><p>Choose an available ERA5 day or WRF run, then calculate.</p></div><span class="empty-coordinate">52.817°N &nbsp; 4.125°W</span></div>
+        <div id="flight-result" hidden>
+          <div class="metrics"><div><span id="metric-endpoint-label">LANDING</span><strong id="metric-landing">—</strong><small id="metric-landing-time"></small></div><div><span>FLIGHT TIME</span><strong id="metric-duration">—</strong><small id="metric-stages"></small></div><div><span>DRIFT FROM LAUNCH</span><strong id="metric-drift">—</strong><small id="metric-burst"></small></div></div>
+          <div class="chart-wrap"><svg id="altitude-chart" viewBox="0 0 900 150" role="img" aria-label="Altitude over flight time"></svg><span id="chart-hover" class="chart-hover"></span></div>
+          <details id="warnings"><summary>Model notes &amp; provenance</summary><ul id="warning-list"></ul><pre id="provenance"></pre></details>
+        </div>
+      </div>
+    </section>
+  </main>
+  <dialog id="weather-dialog">
+    <div class="dialog-heading"><div><span class="eyebrow">YOUR ATMOSPHERE</span><h2>Weather library</h2></div><button id="weather-close" class="close-button" aria-label="Close weather library">×</button></div>
+    <div class="archive-paths"><p><strong>Direct local files.</strong> ERA5 and WRF volumes stay on disk; the reader loads the needed columns.</p><p id="archive-paths" class="field-note"></p><button id="rescan-weather" type="button" class="button quiet">Rescan local data ↻</button><div id="rescan-status" class="status-message" role="status"></div></div>
+    <div id="dataset-list" class="dataset-list"></div>
+    <details class="download-section" open><summary>Download ERA5 or operational forecasts</summary>
+      <form id="weather-form">
+        <div class="two-columns"><div class="field"><label for="download-source">Weather source</label><select id="download-source"><option value="era5">ERA5 · final reanalysis</option><option value="era5t">ERA5T · recent reanalysis</option><option value="ifs">ECMWF operational · IFS forecast</option></select></div><div class="field"><label for="download-name">Dataset name</label><input id="download-name" pattern="[a-z0-9][a-z0-9_-]{0,63}" value="era5-uk-20240115" required></div></div>
+        <p id="source-note" class="callout">ERA5 is historical data. Your CDS credentials stay on the server. Accept the pressure-level and single-level dataset terms before downloading.</p>
+        <div class="two-columns"><div class="field"><label for="download-start">Start <span>UTC</span></label><input id="download-start" type="datetime-local" required></div><div class="field"><label for="download-end">End <span>UTC</span></label><input id="download-end" type="datetime-local" required></div></div>
+        <div class="area-fields"><div class="field"><label for="area-n">North</label><input id="area-n" type="number" step="any" value="60" min="-90" max="90" required></div><div class="field"><label for="area-w">West</label><input id="area-w" type="number" step="any" value="-12" min="-180" max="180" required></div><div class="field"><label for="area-s">South</label><input id="area-s" type="number" step="any" value="48" min="-90" max="90" required></div><div class="field"><label for="area-e">East</label><input id="area-e" type="number" step="any" value="5" min="-180" max="180" required></div></div>
+        <div class="two-columns"><div class="field"><label for="download-grid">ERA5 grid <span>degrees</span></label><select id="download-grid"><option value="0.25">0.25°</option><option value="0.5">0.5°</option><option value="1">1°</option><option value="2">2°</option></select></div><div class="field" id="cycle-field" hidden><label for="download-cycle">IFS cycle <span>optional UTC</span></label><input id="download-cycle" type="datetime-local"><p class="field-note">Blank = latest available 00/12 UTC cycle.</p></div></div>
+        <label class="check-field"><input id="download-surface" type="checkbox" checked> Include surface winds and terrain</label>
+        <label class="check-field"><input id="download-refresh" type="checkbox"> Refresh cached remote files</label>
+        <button id="download-button" type="submit" class="button primary">Download &amp; add dataset <span>↓</span></button>
+        <div id="weather-status" class="status-message" role="status" aria-live="polite">Downloads run separately from flight calculations.</div>
+      </form>
+    </details>
+    <details class="wrf-instructions"><summary>Use your WRF output or existing weather files</summary><p>Native WRF output is indexed directly from <code>/data1/tim/SkySightWRF</code>. Keep each run in its own folder and use standard <code>wrfout_d01_…</code> / <code>wrfout_d02_…</code> files. Click <strong>Rescan local data</strong>, then select the run/domain. Only actual timestamps are used; unavailable dates and coverage gaps report an explanation.</p><p>Change <code>wrf_root</code> or <code>era5_root</code> in <code>config.yml</code> for another location. Large WRF files can stay where they are; no upload or full-volume conversion is needed.</p><p>The existing cropped import workflow is also available:</p><pre>python -m balloon_predictor import-wrf --name my-wrf \
+  --files "/data1/tim/SkySightWRF/wrfout_d02_*" \
+  --area 60 -12 48 5</pre><p>For existing pressure-level ERA5/IFS GRIB or NetCDF, use <code>import-era5</code> / <code>import-ifs</code>. See <code>docs/WRF.md</code> for required WRF variables, humidity, multiple runs and limitations.</p></details>
+  </dialog>
+  <div id="toast" role="status" hidden></div>
+</body>
+</html>

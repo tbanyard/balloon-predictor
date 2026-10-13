@@ -1,0 +1,13 @@
+# Import your wrfout_d02 files as wrf-d02 first; adjust dates and coordinates.
+dataset: wrf-d02
+launch_datetime: "2026-10-03T13:32:00Z"
+launch_latitude: 52.817208
+launch_longitude: -4.125
+launch_altitude: 100
+ascent_rate: 2
+burst_altitude: 25000
+descent_rate: 5
+descent_model: density
+landing_mode: terrain
+time_step: 10
+max_duration_hours: 12

@@ -1,0 +1,24 @@
+services:
+  predictor:
+    build: .
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - predictor-data:/app/data
+    # To enable ERA5, copy .cdsapirc.example to .cdsapirc, add your token,
+    # then add the following mount beneath volumes:
+    #   - ./.cdsapirc:/home/balloon/.cdsapirc:ro
+    # To read existing ERA5 and large WRF files directly, add:
+    #   - /data3/ERA5:/data3/ERA5:ro
+    #   - /data1/tim/SkySightWRF:/data1/tim/SkySightWRF:ro
+    # To import cropped WRF output in Docker, also add:
+    #   - ./data/raw:/app/data/raw:ro
+    #   - ./config.yml:/app/config.yml:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+volumes:
+  predictor-data:

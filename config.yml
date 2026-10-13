@@ -1,0 +1,36 @@
+# Paths are relative to this file. No credentials belong here.
+data_dir: data
+workers: 2
+max_weather_mb: 2048
+
+# Read the same model-level files as the companion ERA5 viewer.
+era5_root: /data3/ERA5
+# Native wrfout files, including files around 10 GB, stay in this directory.
+wrf_root: /data1/tim/SkySightWRF
+# Budget for decoded column data. Horizontal geometry uses additional RAM.
+cache_mb: 256
+# Never interpolate through missing days or long gaps.
+max_time_gap_hours: 6
+
+# Define your local WRF run(s), then run:
+#   balloon-predictor import-config
+# Each entry is one fixed horizontal domain. Use another name for another nest/run.
+datasets:
+  - name: wrf-d02
+    label: My WRF run · domain 02
+    source: wrf
+    enabled: false
+    files:
+      - data/raw/wrfout_d02_*
+    # Optional inclusive timestamps: retain the times bracketing the whole flight.
+    # start: "2026-10-03T12:00:00Z"
+    # end: "2026-10-04T00:00:00Z"
+    # Optional crop [north, west, south, east].
+    # area: [60, -12, 48, 5]
+
+  - name: archived-era5
+    source: era5
+    enabled: false
+    files:
+      - data/raw/era5-pressure.nc
+      - data/raw/era5-surface.nc

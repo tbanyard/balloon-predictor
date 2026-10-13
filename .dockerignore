@@ -1,0 +1,12 @@
+.git
+.venv
+.env
+.cdsapirc
+__pycache__
+.pytest_cache
+data/raw/*
+data/cache/*
+data/weather/*
+data/results/*
+*.egg-info
+node_modules

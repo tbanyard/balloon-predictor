@@ -1,0 +1,8 @@
+# Replace with your launch window. The default cycle is the latest 00/12 UTC run.
+source: ifs
+name: ifs-uk-20261003
+start: "2026-10-03T12:00:00Z"
+end: "2026-10-04T00:00:00Z"
+area: [60, -12, 48, 5]
+surface: true
+# cycle: "2026-10-01T00:00:00Z"
