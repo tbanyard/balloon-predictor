@@ -14,7 +14,7 @@ from starlette.background import BackgroundTask
 from . import __version__
 from .errors import PredictorError
 from .exports import arrival_csv_export, csv_export, geojson, kml_export
-from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest
+from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest, SondeExportRequest
 from .storage import activity, inventory, cleanup, StorageLeaseMiddleware
 from .context import flight_weather
 from .provenance import validate_manifest
@@ -299,6 +299,28 @@ def create_app(settings=None):
     @app.post("/api/terrain/download", status_code=202)
     def download_terrain(body: TerrainDownloadRequest):
         return jobs.submit("terrain", lambda progress: store.terrain.download(body.latitude,body.longitude,progress))
+
+    @app.post("/api/predictions/{job_id}/sonde-export", status_code=202)
+    def prepare_sonde_export(job_id: str, body: SondeExportRequest):
+        """Prepare a persistent sonde download with progress, like a model box."""
+        from .sonde import write_sonde
+        result = selected_result(job_id, body.flight_index)
+        def task(progress):
+            validate_manifest(result)
+            request = PredictionRequest.model_validate(result["request"])
+            progress("Preparing simulated sonde along the selected flight…")
+            weather = flight_weather(store.get(request.dataset, request.launch_datetime), request)
+            path = settings.data_dir / "exports" / (uuid.uuid4().hex + ".sonde.nc")
+            try:
+                write_sonde(path, result, weather, body.scope, progress=progress)
+                validate_manifest(result)
+                return {"path": str(path), "filename": f"model-sonde-{request.launch_datetime:%Y%m%dT%H%M%SZ}-{job_id[:8]}-{body.flight_index}-{body.scope}.nc",
+                        "bytes": path.stat().st_size, "type": "sonde", "scope": body.scope,
+                        "flight_index": body.flight_index, "warnings": []}
+            except Exception:
+                path.unlink(missing_ok=True)
+                raise
+        return jobs.submit("export", task)
 
     @app.post("/api/predictions/{job_id}/model-box", status_code=202)
     def model_box(job_id: str, body: ModelBoxRequest):

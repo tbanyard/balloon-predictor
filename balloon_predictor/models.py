@@ -52,7 +52,7 @@ class PredictionRequest(StrictModel):
     def sensible_flight(self):
         if self.burst_altitude <= self.launch_altitude:
             raise ValueError("Burst altitude must exceed launch altitude (both AMSL).")
-        if self.landing_mode == "fixed" and self.landing_altitude >= self.burst_altitude:
+        if self.flight_mode == "full" and self.landing_mode == "fixed" and self.landing_altitude >= self.burst_altitude:
             raise ValueError("Landing altitude must be below burst altitude.")
         return self
 
@@ -150,3 +150,8 @@ class CleanupRequest(StrictModel):
 class TerrainDownloadRequest(StrictModel):
     latitude: float = Field(ge=-85, le=85)
     longitude: float = Field(ge=-180, le=360)
+
+
+class SondeExportRequest(StrictModel):
+    flight_index: int = Field(default=0, ge=0)
+    scope: Literal["ascent", "full"] = "ascent"

@@ -1,5 +1,28 @@
 # Changelog
 
+## v1.4.0 — 2026-11-06
+
+- Remove section numbers; rename the metrics/download panel Flight Details and
+  the Skew-T/wind panel Flight Profile. Use Data origins in the interface.
+- Put the sidebar hide button inside Flight Setup and the sticky reopen tab
+  beside Trajectory. Retain the responsive mobile drawer and status visibility.
+- Explain near-surface estimation plainly, use +/− disclosures, and disable
+  landing settings for ascent-only/coordinated flights. Ignore irrelevant fixed
+  landing/target altitude ordering in ascent-only request validation.
+- Animate a small theme-orange vector balloon during calculations, with reduced
+  motion support and cleanup on success or failure.
+- Separate model-box and sonde export cards, options, progress and persistent
+  save links. Both auto-download when ready; async state stays with its original
+  flight/scope. Add background sonde exports while keeping the old direct URL.
+- Replace Dock with explicit Arrange placements; add drag-to-edge halves,
+  quarters and maximise previews, gentle move/resize alignment with release, and
+  Alt for free movement. Use a two-box Unmaximise symbol and correct tooltip.
+- Preserve v1.3 layouts/setups, physics and data workflows. Dependencies unchanged.
+- Validation: 89 backend tests, full frontend DOM/API workflow, 13 window
+  interaction scenarios and dedicated export/loading workflow checks pass.
+  Actual rendered desktop/Android checks remain unverified in this runtime.
+
+
 ## v1.3.0 — 2026-11-05
 
 - Separate physical launch ground, DEM landing and model orography; preserve

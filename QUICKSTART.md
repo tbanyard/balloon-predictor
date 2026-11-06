@@ -1,123 +1,103 @@
-# BalloonPredictor v1.3
+# BalloonPredictor v1.4
 
-Extract the ZIP into `/data1/tim`. Its `balloon-predictor-v1.3` folder can sit
-beside the existing v1.2 installation. Python 3.12+ is required.
-
-```bash
-cd /data1/tim/balloon-predictor-v1.3
-bash start.sh
-```
-
-Open **http://127.0.0.1:8001**. Without an active environment, first-time startup
-installs the pinned dependencies in a per-user environment. For an existing
-Conda environment, install this release's dependencies first:
+Extract the ZIP into `/data1/tim`. Its `balloon-predictor-v1.4` folder can sit
+beside v1.3. Python 3.12 is recommended. To keep concurrently running versions
+independent, use a separate Conda environment:
 
 ```bash
-conda activate balloon-predictor
+conda create -n balloon-v14 -c conda-forge python=3.12 pip
+conda activate balloon-v14
+cd /data1/tim/balloon-predictor-v1.4
 python -m pip install -r requirements.lock.txt
-bash start.sh
+python -m pip check
+bash start.sh --port 8001
 ```
 
-Or create a new environment, from the extracted project directory:
+Install once in that environment. For subsequent launches:
 
 ```bash
-conda create -n balloon-predictor-v13 -c conda-forge python=3.12 pip gh git
-conda activate balloon-predictor-v13
-python -m pip install -r requirements.lock.txt
-bash start.sh
+conda activate balloon-v14
+cd /data1/tim/balloon-predictor-v1.4
+bash start.sh --port 8001
 ```
 
-For a remote machine, forward the port from your own computer:
+Open **http://127.0.0.1:8001**. Use another free port if an existing server is
+already on 8001, or stop that server first. A server on port 8000 can keep
+running in its own environment. Avoid changing packages in an environment used
+by another running application.
+
+The v1.4 dependency lock is unchanged from v1.3. A compatible existing environment
+can be used; matching packages do not need reinstalling. Without an activated
+environment, `bash start.sh` manages a per-user environment automatically. That
+automatic environment is shared across predictor versions, so use explicitly
+separate environments when keeping different versions running independently.
+
+Launch setups, weather storage paths and v1.3 window geometry are retained.
+Linux's default launcher data directory remains
+`~/.local/share/balloon-predictor` (or `$XDG_DATA_HOME/balloon-predictor`). The
+weather manager shows the actual server paths. Different environments do not
+isolate this data folder: use `BP_DATA_DIR` for separate data collections if
+wanted. Do not clear data while v1.2 or older processes are using it.
+
+For a remote server, forward the port from your computer:
 
 ```bash
 ssh -L 8001:127.0.0.1:8001 tim@YOUR_SERVER
 ```
 
-Then open the same local URL. Override the port with `bash start.sh --port 8002`.
+## Weather and terrain
 
-## Download an operational forecast
+Select an existing ERA5 day, WRF run, saved forecast or Demo. To download an
+operational forecast, choose **Online · ECMWF operational IFS…** or
+**Online · NOAA GFS…**, or open **Manage weather**. Check the area and UTC window,
+covering the entire flight or earliest coordinated launch through arrival.
+Choose a recent cycle or leave it blank for the latest available run. IFS/GFS
+need no API key; ERA5/ERA5T require CDS credentials.
 
-1. Under **Weather dataset**, select **Online · ECMWF operational IFS…** or
-   **Online · NOAA GFS…**. This opens the retained weather manager.
-2. Check the UTC window, area and dataset name. Enlarge the suggested area for
-   long flights or multiple sites. Include the whole flight through landing,
-   or the earliest coordinated launch through arrival. One download spans at
-   most 72 hours.
-3. Leave the model cycle blank for the latest available run, or specify a recent
-   cycle. Click **Download & add dataset** and wait for completion.
-4. The new dataset is selected automatically. Calculate flights within its
-   displayed coverage; the model is sampled along each track in space and time.
+For coarse model ground near a coast or valley, open **Ground & model mismatch**.
+Enter a known site elevation or select a physical DEM. **Check ground** compares
+the real site with model orography without moving the launch altitude. The
+near-surface option lets you either estimate missing air below the lowest usable
+model level or stop there. The approximation is explained and recorded.
 
-ECMWF/GFS need no API key. Downloads are cached and successful datasets persist.
-These are recent operational runs, not historical archives. CDS credentials
-remain necessary for ERA5/ERA5T downloads.
+Manage weather → **Physical high-resolution terrain** can download a regional
+GLO-30 tile at your launch point or use local GeoTIFF DEM/DTM files. Add adjacent
+tiles when needed for DEM landings. A known launch elevation and the selected
+landing surface are independent. Landing/descent settings are disabled for
+ascent-only flights and coordinated arrivals.
 
-## Coordinate balloons at one altitude and time
+## Panels, progress and downloads
 
-Open **Launch schedule & coordination → Reach altitude together**. Enter the
-arrival UTC time, an AMSL target such as 20000 m, and rates such as `5, 4, 3, 2`.
-Choose the current launch point or all saved points. Alternatively choose each
-saved point's individual ascent rate. Click **Plan coordinated arrivals**.
+The unnumbered panels are **Flight Map**, **Flight Details** (metrics, altitude
+history and downloads), and **Flight Profile** (Skew-T and wind profiles).
+**‹ Controls** is inside Flight Setup; hiding it exposes **› Controls** beside
+Trajectory. On phones this opens a left drawer. The orange balloon beside job
+status animates while calculating, including when controls are hidden.
 
-The table lists launch times in order and predicted positions at arrival. Click
-a balloon to inspect its ascent or download its sonde. The optional atmospheric
-vertical wind is included when solving launch times. Flights stop at the common
-altitude, within 0.25 s of the requested time. Failed coverage is listed per
-balloon. Up to 80 balloons are allowed. The dotted endpoint connector is a
-formation guide; equal time/altitude does not guarantee a straight spatial line.
+After a prediction, Flight Details contains two clearly separated NetCDF cards.
+Each has its own options, progress, action and save link. Model boxes may include
+one flight plus sensitivity tracks or a whole plan; sondes always use only the
+selected flight. Both begin downloading when ready and leave a reusable Save
+link. Generated exports remain until you clear saved predictions/exports.
 
-## Download a simulated sonde
+Use **Arrange ▾** for halves/quarters or drag an unlocked window to a workspace
+edge and release over its orange preview. Drag away to float again. Nearby
+edges gently align; pull farther to release, or hold Alt for free movement.
+**+** maximises, the two-box icon **Unmaximise** restores, and **−** minimises.
+Toolbar **Map / Details / Profile** buttons toggle panel visibility. Reset layout
+restores the default Map/Details stack and its adjustable split.
 
-Select a completed flight and, for a series/plan, the individual balloon.
-Click **Download sonde NetCDF** in the flight profile. Choose ascent only or
-full flight with the adjacent selector. The export follows the supplied
-22-variable NETCDF4 schema, with 1 Hz model samples and updated simulation
-metadata. Missing humidity and unresolved observational perturbations use NaN.
-See [docs/V1.2.md](docs/V1.2.md) for exact export semantics.
+## Coordinate balloons
 
-## Arrange the workspace
+Open **Launch schedule & coordination**, choose **Reach altitude together**,
+then set a common target altitude/time and ascent rates such as `5, 4, 3, 2`.
+Calculate to get launch times (slower balloons first), arrival positions and a
+CSV timetable. This aligns altitude/time; it does not guarantee a straight
+geometric line or eliminate forecast uncertainty.
 
-Drag an unlocked panel by its header; resize from its lower-right corner.
-**Lock/Unlock** fixes/releases its geometry. Focus the header/resize handle and
-use arrow keys (Shift for larger changes) for keyboard control. **Dock** restores
-the default position. **−** minimises; reopen with **Map**, **Profile** or
-**Sounding** in the toolbar. **Reset layout** restores all defaults.
+## More details
 
-The orange arrow hides/restores the sidebar. Docked map/profile panels adapt to
-the freed space. Layout and locks are remembered. On narrow screens, panels
-stack vertically and movement/resizing is disabled.
-
-## Existing weather and flight features
-
-ERA5 remains the initial dataset, reading `/data3/ERA5` and `era5_topo.nc` as
-in ERA5Viewer. Native WRF files are indexed from `/data1/tim/SkySightWRF` without
-loading entire volumes. Use **Manage weather → Rescan local data**. Change paths
-in `config.yml`, or pass `bash start.sh --config /path/to/config.yml`.
-
-Launch tabs, repeated schedules, sensitivity members, landing/burst comparisons,
-Skew-T/u-v plots, setup import/export and JSON/CSV/GeoJSON/KML remain available.
-Real WRF support still depends on the variables in [docs/WRF.md](docs/WRF.md).
-See [docs/GIT.md](docs/GIT.md) for GitHub updates and the `v1.3.0` release tag.
-
-## New v1.3 controls
-
-Use **Ground & model mismatch** to enter the physical site elevation or select
-high-resolution terrain. **Check ground** compares it with model orography
-without changing the entered launch altitude. For realistic coastal landings,
-select **Physical high-resolution DEM** as the landing surface and add tiles
-covering the route. The default bridge approximation is labelled in results;
-select Strict when you require fully resolved model air.
-
-**Manage weather** shows the actual save directories and offers separate cleanup
-buttons for raw cache, named datasets, and prediction/export files. It can also
-download one public GLO-30 launch tile or use your own regional GeoTIFFs.
-
-Beside the sonde export, **Download model box NetCDF** exports all available
-levels and bracketing model times, with a ≥0.5° / 50 km margin. It has independent
-full-flight/ascent and selected-flight/whole-plan choices. Writing runs as a job;
-use the resulting save link to download it again if needed.
-
-The header Controls button opens a left drawer on phones. Desktop panels have
-maximise/restore, edge/corner resize and a docked Map/Profile split divider.
-
-Details and limitations: [docs/V1.3.md](docs/V1.3.md).
+- [docs/V1.4.md](docs/V1.4.md): changes and verification limits.
+- [docs/V1.3.md](docs/V1.3.md): model-box contents, terrain physics and cleanup.
+- [docs/API-AND-ORIGINS.md](docs/API-AND-ORIGINS.md): API/OAS/GET/POST and Data origins.
+- [docs/GIT.md](docs/GIT.md): GitHub upload and `v1.4.0` release tag.

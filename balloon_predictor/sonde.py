@@ -52,7 +52,7 @@ def sampled_track(result, scope="ascent"):
     return seconds, latitude, longitude, altitude
 
 
-def write_sonde(path, result, weather, scope="ascent"):
+def write_sonde(path, result, weather, scope="ascent", progress=None):
     from .context import flight_weather
     from .models import PredictionRequest
     weather = flight_weather(weather, PredictionRequest.model_validate(result["request"]))
@@ -63,6 +63,8 @@ def write_sonde(path, result, weather, scope="ascent"):
     fields = {name: np.full(count, np.nan, dtype="float64") for name in schema["variables"] if name != "time"}
     fields.update(timePeriod=seconds.astype("float64"), lat=lat, lon=lon, alt=alt)
     for i, second in enumerate(seconds):
+        if progress and i % 500 == 0:
+            progress(f"Sampling sonde · {i:,}/{count:,} one-second points")
         sample = weather.sample(float(lat[i]), float(lon[i]), float(alt[i]), start + timedelta(seconds=int(second)))
         fields["pressure"][i] = sample.pressure / 100
         fields["temp"][i] = sample.temperature
@@ -113,6 +115,8 @@ def write_sonde(path, result, weather, scope="ascent"):
         surfaceTemperature_C=fields["temp"][0]-273.15, surfaceWindDir=fields["windDir"][0],
         surfaceHumidity=fields["relative_humidity"][0], surfacePressure=fields["pressure"][0],
         launch_time=start.isoformat().replace("+00:00", "Z"))
+    if progress:
+        progress(f"Writing sonde NetCDF · {count:,} sampled points")
     with NETCDF_LOCK, Dataset(path, "w", format=schema["format"]) as ds:
         ds.createDimension("time", count)
         for name, spec in schema["global_attributes"].items():

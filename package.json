@@ -1,11 +1,14 @@
 {
   "name": "balloon-predictor-frontend-checks",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
   "description": "Optional DOM integration test; no Node build step is needed to run the predictor.",
   "scripts": {
     "test:frontend": "node scripts/frontend-smoke.cjs",
-    "test:browser": "node scripts/browser-check.cjs"
+    "test:browser": "node scripts/browser-check.cjs",
+    "test:windows": "node scripts/window-smoke.cjs",
+    "test:exports": "node scripts/export-smoke.cjs",
+    "test:ui": "npm run test:windows && npm run test:frontend && npm run test:exports"
   },
   "devDependencies": {
     "jsdom": "26.1.0",

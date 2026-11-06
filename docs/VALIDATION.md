@@ -1,3 +1,20 @@
+# Validation for v1.4
+
+The v1.4 release passes **89 backend tests**. Its existing frontend DOM/API
+workflow also passes. Additional v1.4 checks cover 13 window-interaction
+scenarios and real NetCDF export/loading workflows against synthetic weather.
+These use the actual shipped JS/API, not a duplicated demonstration UI.
+
+See [V1.4.md](V1.4.md#verification-and-limits) for coverage, commands and limits.
+Local Chromium/Firefox could not start in this runtime, and the remote browser
+could not reach the local test server. Rendered desktop/Android/touch validation
+is therefore not claimed. The Playwright script is updated and included for
+local execution. PowerShell/Docker startup was not executed here.
+
+The previous validation record is retained below as historical information.
+
+---
+
 # Validation of BalloonPredictor v1.2
 
 Release checks on Python 3.12, Linux, 5 November 2026.

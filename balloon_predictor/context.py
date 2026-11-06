@@ -51,9 +51,9 @@ class FlightWeather:
                     return original(ti, y, x, altitude)
                 depth = float(anchor - altitude)
                 if request.below_model_policy == "strict":
-                    raise CoverageError(f"Strict ground policy: {altitude:.1f} m is below the lowest valid model air at {anchor:.1f} m AMSL. Enable the labelled bridge approximation or use a better-resolved model.")
+                    raise CoverageError(f"Strict ground policy: {altitude:.1f} m is below the lowest valid model air at {anchor:.1f} m AMSL. Choose “Estimate the missing near-surface air” or use a model with better vertical/terrain resolution.")
                 if depth > 3000:
-                    raise CoverageError("Below-model bridge would exceed 3 km. Use a model that resolves this launch site.")
+                    raise CoverageError("Estimating the missing near-surface air would extend more than 3 km below the model’s lowest valid air. Use a model that resolves this launch site.")
                 values = original(ti, y, x, anchor)
                 temperature = values["temperature"] + .0065 * depth
                 values["pressure"] *= (temperature / values["temperature"]) ** (9.80665 / (287.05 * .0065))

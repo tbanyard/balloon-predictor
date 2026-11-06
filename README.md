@@ -1,17 +1,18 @@
-# BalloonPredictor v1.3
+# BalloonPredictor v1.4
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
 Runs on your computer at **http://localhost:8001**.
 
-Start with [QUICKSTART.md](QUICKSTART.md). Version 1.3 separates real ground from
-model orography, adds regional GeoTIFF terrain and native model-box NetCDF export,
-shows weather storage and cleanup controls, and improves desktop windows and the
-mobile sidebar drawer. Operational IFS/GFS downloads, coordinated arrivals,
-sonde files, ERA5 archives, large native WRF files and existing exports remain.
+Start with [QUICKSTART.md](QUICKSTART.md). Version 1.4 gives the panels consistent
+names, clearer ground settings, an orange balloon loading animation, independent
+NetCDF download cards, and window halves/quarters with gentle edge alignment.
+The sidebar Controls button returns to Flight Setup, and source information is
+labelled **Data origins**. v1.3's terrain, cleanup and model-box features remain.
 
-See [docs/V1.3.md](docs/V1.3.md) for setup, terrain policies, export details and
-verification limits. The original sonde contract is in [docs/V1.2.md](docs/V1.2.md).
+See [docs/V1.4.md](docs/V1.4.md) for the interface changes and validation limits,
+[docs/V1.3.md](docs/V1.3.md) for terrain/model-box details, and
+[docs/API-AND-ORIGINS.md](docs/API-AND-ORIGINS.md) for the terminology explained.
 
 See [CHANGELOG.md](CHANGELOG.md) and [docs/GIT.md](docs/GIT.md) for the release
 changes and a ready-to-follow GitHub upload guide.
@@ -33,7 +34,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-v1.3 directory. Initial installation needs internet
+the extracted balloon-predictor-v1.4 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 Generated data is per-user under `~/.local/share/balloon-predictor` unless
@@ -115,7 +116,7 @@ The roots also accept `BP_ERA5_ROOT` / `BP_WRF_ROOT`, and the server accepts
 ## Launch points, schedules and endpoint comparisons
 
 **Add launch point** / **Duplicate** create independent setups (up to 20).
-Tabs in **03 / Flight Profile** and the map's launch markers switch between them.
+Tabs in **Flight Details** and the map's launch markers switch between them.
 Setups are saved in this browser; **Save launch setups** / **Load setups** let
 you move them between browsers. Calculated results stay in the server's results
 folder and can be exported; browser reload restores setups rather than tracks.
@@ -143,7 +144,7 @@ including sensitivity members, to keep processing reviewable and bounded.
 
 ## Skew-T and u/v profiles
 
-After a successful prediction, **Open Skew-T & u/v alongside** opens the
+After a successful prediction, **Open Flight Profile · Skew-T & winds** opens the
 atmospheric diagnostics beside the map. The initial sounding samples the model
 at the balloon's changing ascent position and timestamp. **Fixed launch
 column** holds position/time fixed and samples up to the same target altitude.
@@ -356,7 +357,7 @@ API reference: **http://localhost:8001/docs**
 
 | Endpoint | Purpose |
 |---|---|
-| GET /api/weather | Available datasets with coverage/provenance |
+| GET /api/weather | Available datasets with coverage/data origins |
 | POST /api/weather/download | Start a download job |
 | POST /api/predictions | Start an asynchronous prediction job |
 | GET /api/jobs/{id} | Poll queued/running/completed/failed state |
@@ -435,13 +436,14 @@ Optional frontend DOM check (requires Node 20+, only for development):
 
 ~~~bash
 npm install
-npm run test:frontend
+npm run test:ui
 ~~~
 
-This uses JSDOM and the real local API; it does not render a visual browser.
+These checks use JSDOM and the real local API, including window gestures and
+NetCDF export/loading workflows. They do not render a visual browser.
 Node/npm are not needed for normal application use.
 
-A real-browser regression is included for running on a machine with Chromium:
+A real-browser regression is included for running locally with Chromium:
 
 ```bash
 npx playwright install chromium
