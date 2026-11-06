@@ -69,7 +69,7 @@ class DatasetWeather:
         self.fields = {name: np.asarray(ds[name].values) for name in
                        ("u", "v", "height", "temperature", "pressure", "w", "specific_humidity") if name in ds}
         self.surface = {name: np.asarray(ds[name].values) for name in
-                        ("surface_u", "surface_v", "surface_temperature", "surface_pressure") if name in ds}
+                        ("surface_u", "surface_v", "surface_temperature", "surface_pressure", "surface_specific_humidity") if name in ds}
         self.ground = np.asarray(ds.terrain.values) if "terrain" in ds else None
         self.setup_grid(ds.latitude.values, ds.longitude.values)
 
@@ -148,13 +148,17 @@ class DatasetWeather:
     def _column(self, ti, y, x, altitude):
         h = self.fields["height"][ti, :, y, x].astype("float64")
         values = {name: arr[ti, :, y, x].astype("float64") for name, arr in self.fields.items() if name != "height"}
+        if "surface_specific_humidity" in self.surface and "specific_humidity" not in values:
+            values["specific_humidity"] = np.full_like(h, np.nan)
         terrain = float(self.ground[y, x]) if self.ground is not None else -np.inf
         good = np.isfinite(h) & (h > terrain + 0.1)
         for name in ("u", "v", "temperature", "pressure"):
             good &= np.isfinite(values[name])
         good &= (values["temperature"] > 0) & (values["pressure"] > 0)
-        if "w" in values:
-            good &= np.isfinite(values["w"])
+        if "surface_pressure" in self.surface:
+            ground_pressure = float(self.surface["surface_pressure"][ti, y, x])
+            if math.isfinite(ground_pressure) and ground_pressure > 0:
+                good &= values["pressure"] <= ground_pressure
         h = h[good]
         values = {name: value[good] for name, value in values.items()}
         if len(h) < 2:
@@ -171,11 +175,15 @@ class DatasetWeather:
         if math.isfinite(terrain) and all(key in self.surface for key in surface_keys.values()):
             surface_values = {key: float(self.surface[field][ti, y, x]) for key, field in surface_keys.items()}
             if all(math.isfinite(v) for v in surface_values.values()) and surface_values["pressure"] > 0 and surface_values["temperature"] > 0:
+                if "surface_specific_humidity" in self.surface:
+                    q = float(self.surface["surface_specific_humidity"][ti, y, x])
+                    if math.isfinite(q) and 0 <= q < 1:
+                        surface_values["specific_humidity"] = q
                 surface_height = terrain + 10
                 above = h > surface_height + 0.1
                 if np.any(above):
                     h = np.r_[surface_height, h[above]]
-                    values = {key: np.r_[surface_values.get(key, 0), val[above]] for key, val in values.items()}
+                    values = {key: np.r_[surface_values.get(key, np.nan if key == "specific_humidity" else 0), val[above]] for key, val in values.items()}
         # Below the lowest represented wind, hold that wind (usually the 10 m field).
         result = {key: float(np.exp(np.interp(altitude, h, np.log(val)))) if key == "pressure"
                   else float(np.interp(altitude, h, val)) for key, val in values.items()}

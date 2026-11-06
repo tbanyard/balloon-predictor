@@ -15,7 +15,11 @@ ALIASES = {"u": "u", "u_component_of_wind": "u", "v": "v", "v_component_of_wind"
            "10u": "surface_u", "u10": "surface_u", "10m_u_component_of_wind": "surface_u",
            "10v": "surface_v", "v10": "surface_v", "10m_v_component_of_wind": "surface_v",
            "2t": "surface_temperature", "t2m": "surface_temperature", "2m_temperature": "surface_temperature",
-           "sp": "surface_pressure", "surface_pressure": "surface_pressure"}
+           "sp": "surface_pressure", "surface_pressure": "surface_pressure",
+           "orog": "geopotential_height", "q": "specific_humidity", "specific_humidity": "specific_humidity",
+           "2sh": "surface_specific_humidity", "q2m": "surface_specific_humidity",
+           "2d": "surface_dewpoint", "d2m": "surface_dewpoint", "2m_dewpoint_temperature": "surface_dewpoint",
+           "r": "relative_humidity", "relative_humidity": "relative_humidity"}
 
 
 def _indices(lat, lon, area):
@@ -40,7 +44,7 @@ def _assemble(records, lat, lon, versions=None, attrs=None):
         raise PredictorError("No usable pressure-level winds were found.")
     shape = (len(times), len(levels), len(lat), len(lon))
     fields = {}
-    for name in ("u", "v", "temperature", "geopotential", "geopotential_height", "omega"):
+    for name in ("u", "v", "temperature", "geopotential", "geopotential_height", "omega", "specific_humidity", "relative_humidity"):
         if not any(key[2] == name for key in records):
             continue
         values = np.full(shape, np.nan, dtype="float32")
@@ -66,13 +70,27 @@ def _assemble(records, lat, lon, versions=None, attrs=None):
     if not np.isfinite(fields["height"]).any(axis=(2, 3)).all():
         raise PredictorError("Missing geopotential/height at one or more valid times/pressure levels.")
     fields["pressure"] = np.broadcast_to(np.asarray(levels, dtype="float32")[None, :, None, None] * 100, shape).copy()
+    if "relative_humidity" in fields:
+        tc = fields["temperature"] - 273.15
+        vapor = fields.pop("relative_humidity") / 100 * 611.2 * np.exp(17.67 * tc / (tc + 243.5))
+        converted = .622 * vapor / (fields["pressure"] - .378 * vapor)
+        converted = np.where((converted >= 0) & (converted < 1), converted, np.nan)
+        if "specific_humidity" in fields:
+            fields["specific_humidity"] = np.where(np.isfinite(fields["specific_humidity"]), fields["specific_humidity"], converted)
+        else:
+            fields["specific_humidity"] = converted
     if "omega" in fields:
         fields["w"] = -fields.pop("omega") * R_D * fields["temperature"] / (fields["pressure"] * G)
     surface = {}
     surface_shape = (len(times), len(lat), len(lon))
-    for name in ("surface_u", "surface_v", "surface_temperature", "surface_pressure"):
+    for name in ("surface_u", "surface_v", "surface_temperature", "surface_pressure", "surface_specific_humidity", "surface_dewpoint"):
         if all((time, 0, name) in records for time in times):
             surface[name] = np.stack([records[(time, 0, name)][1] for time in times])
+    if "surface_dewpoint" in surface:
+        dewpoint = surface.pop("surface_dewpoint") - 273.15
+        if "surface_pressure" in surface and "surface_specific_humidity" not in surface:
+            vapor = 611.2 * np.exp(17.67 * dewpoint / (dewpoint + 243.5))
+            surface["surface_specific_humidity"] = .622 * vapor / (surface["surface_pressure"] - .378 * vapor)
     terrain_keys = sorted(key for key in records if key[1] == 0 and key[2] in ("geopotential", "geopotential_height"))
     if terrain_keys:
         key = terrain_keys[0]
@@ -90,7 +108,7 @@ def _assemble(records, lat, lon, versions=None, attrs=None):
                                {"warnings_json": json.dumps(warnings), "provenance_json": json.dumps(provenance), **(attrs or {})})
 
 
-def read_grib(paths, area=None, start=None, end=None, attrs=None):
+def read_grib(paths, area=None, start=None, end=None, attrs=None, expected_cycle=None):
     """Stream GRIB messages and crop each decoded field before retaining it."""
     try:
         import eccodes as ec
@@ -108,6 +126,12 @@ def read_grib(paths, area=None, start=None, end=None, attrs=None):
                         continue
                     if ec.codes_get(gid, "gridType") != "regular_ll":
                         raise PredictorError("Only regular latitude/longitude GRIB is supported. Regrid reduced Gaussian/model-level data first.")
+                    if expected_cycle is not None:
+                        if (int(ec.codes_get(gid, "dataDate")) != int(expected_cycle.strftime("%Y%m%d")) or
+                            int(ec.codes_get(gid, "dataTime")) != expected_cycle.hour * 100):
+                            raise PredictorError("Forecast GRIB initialization does not match the selected model cycle.")
+                        if ec.codes_is_defined(gid, "perturbationNumber") and int(ec.codes_get(gid, "perturbationNumber")) != 0:
+                            raise PredictorError("Select a deterministic/control forecast, not mixed ensemble members.")
                     typ = ec.codes_get(gid, "typeOfLevel")
                     if typ == "isobaricInhPa":
                         level = float(ec.codes_get(gid, "level"))

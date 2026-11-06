@@ -1,12 +1,16 @@
-# BalloonPredictor v1.1
+# BalloonPredictor v1.2
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
-Runs on your computer at **http://localhost:8000**.
+Runs on your computer at **http://localhost:8001**.
 
-Start with [QUICKSTART.md](QUICKSTART.md). Version 1.1 adds direct ERA5 viewer
-archive support, large-file WRF reading, launch-point tabs, repeated launches,
-altitude endpoints and synthetic radiosonde plots. Both apps stay independent.
+Start with [QUICKSTART.md](QUICKSTART.md). Version 1.2 adds operational ECMWF
+and GFS downloads with humidity, coordinated arrivals, sonde NetCDF export,
+independent movable/resizable/lockable panels, orange scrollbars, a tab icon and
+collapsible flight controls. ERA5 archives, large native WRF files, multiple
+launch points, repeated launches and existing exports remain available.
+
+See [docs/V1.2.md](docs/V1.2.md) for the new workflows and NetCDF contract.
 
 See [CHANGELOG.md](CHANGELOG.md) and [docs/GIT.md](docs/GIT.md) for the release
 changes and a ready-to-follow GitHub upload guide.
@@ -16,6 +20,7 @@ changes and a ready-to-follow GitHub upload guide.
 | ERA5 | Final historical reanalysis | Reads the ERA5 viewer L137 archive directly by default; also retains CDS downloads and pressure-level imports |
 | ERA5T | Preliminary recent reanalysis, usually about five days behind real time | Uses the same CDS datasets; identifies GRIB expver=5 and records the available release |
 | ECMWF operational / IFS | Actual weather forecasts | Downloads ECMWF open data, with a selected cycle or the latest available 00/12 UTC cycle |
+| NOAA GFS | Operational forecasts | Downloads regional 0.25° NOMADS atmospheric/surface subsets; latest available or explicit 00/06/12/18 UTC cycle |
 | WRF | Your own model output | Reads large native WRF-ARW files directly from /data1/tim/SkySightWRF, with separate run/domain choices; cropped imports remain available |
 | Demo | Synthetic analytical atmosphere | Lets you run the whole application without credentials or weather downloads |
 
@@ -27,7 +32,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor directory. Initial installation needs internet
+the extracted balloon-predictor-v1.2 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 Generated data is per-user under `~/.local/share/balloon-predictor` unless
@@ -48,7 +53,7 @@ chmod +x start.sh
 
 If your PowerShell policy blocks the script, use the manual commands below.
 The scripts install the tested dependency snapshot on the first run and then
-start the server. Open **http://localhost:8000** and click **Calculate flight**
+start the server. Open **http://localhost:8001** and click **Calculate flight**
 to use the selected ERA5 archive. To try without local data, choose
 **Demo · synthetic winds** explicitly. Press Ctrl+C to stop the server.
 
@@ -210,7 +215,7 @@ model top. A 25 km burst can be covered by 10 hPa, but vertical detail is limite
 
 Automatic IFS selection uses 00/12 UTC cycles for a longer forecast window.
 Explicit 06/18 UTC cycles are also supported. This implementation conservatively
-allows 00/12 forecasts to 240 h and 06/18 forecasts to 90 h, with available
+allows 00/12 forecasts to 360 h and 06/18 forecasts to 144 h, with available
 3 h/6 h steps. ECMWF's open-data portal retains recent cycles for a short period;
 for older cycles, import your archived files instead.
 
@@ -344,7 +349,7 @@ balloon-predictor predict examples/flight-demo.yml --output data/results/demo-fl
 The output prefix produces .json, .csv, .geojson and .kml files. API predictions
 are also saved in data/results/ and remain exportable after a server restart.
 
-API reference: **http://localhost:8000/docs**
+API reference: **http://localhost:8001/docs**
 
 | Endpoint | Purpose |
 |---|---|
@@ -363,7 +368,7 @@ for every Tawhiri endpoint, profile or error schema.
 Example:
 
 ~~~bash
-curl -X POST http://localhost:8000/predict \
+curl -X POST http://localhost:8001/predict \
   -H "Content-Type: application/json" \
   -d '{"dataset":"demo","launch_datetime":"2024-01-15T12:00:00Z","launch_latitude":52.817208,"launch_longitude":355.875,"launch_altitude":100,"ascent_rate":2,"burst_altitude":25000,"descent_rate":5}'
 ~~~
@@ -445,7 +450,7 @@ project `.venv`. The script exercises native sources, responsive layouts,
 launch tabs, series, soundings and exports; this check could not run in the
 release execution environment. See docs/VALIDATION.md.
 
-The original v1.0 reference list (retained). Additional v1.1 equation and format
+The original v1.0 reference list (retained). Additional v1.2 equation and format
 references, checked for this release, are in [SCIENCE.md](SCIENCE.md):
 
 - [CDS authentication](https://cds.climate.copernicus.eu/how-to-api)

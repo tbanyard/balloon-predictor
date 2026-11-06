@@ -39,7 +39,8 @@ def dataset_from_arrays(times, latitude, longitude, fields, surface=None, attrs=
         ds[key] = (dims, value)
     units = {"u": "m s-1", "v": "m s-1", "w": "m s-1", "height": "m",
              "temperature": "K", "pressure": "Pa", "terrain": "m", "specific_humidity": "kg kg-1",
-             "surface_u": "m s-1", "surface_v": "m s-1", "surface_temperature": "K", "surface_pressure": "Pa"}
+             "surface_u": "m s-1", "surface_v": "m s-1", "surface_temperature": "K", "surface_pressure": "Pa",
+             "surface_specific_humidity": "kg kg-1"}
     for name, unit in units.items():
         if name in ds:
             ds[name].attrs["units"] = unit
@@ -87,6 +88,6 @@ def describe_dataset(ds, name):
             "minimum_top_altitude": float(np.min(valid_tops)), "maximum_altitude": float(np.max(valid_tops)),
             "missing_columns": int(np.sum(~np.isfinite(tops))),
             "shape": dict(ds.sizes), "terrain_available": "terrain" in ds,
-            "vertical_wind_available": "w" in ds, "humidity_available": "specific_humidity" in ds,
+            "vertical_wind_available": "w" in ds, "humidity_available": "specific_humidity" in ds or "surface_specific_humidity" in ds,
             "warnings": json.loads(ds.attrs.get("warnings_json", "[]")),
             "provenance": json.loads(ds.attrs.get("provenance_json", "{}"))}

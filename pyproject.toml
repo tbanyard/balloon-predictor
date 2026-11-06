@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "balloon-predictor-local"
-version = "1.1.0"
-description = "Local balloon trajectories with ERA5, ERA5T, ECMWF operational forecasts and native WRF output"
+version = "1.2.0"
+description = "Balloon trajectories with ERA5, operational ECMWF/GFS, native WRF, coordinated arrivals and simulated sonde NetCDF"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-weather = ["cdsapi>=0.7.7,<1", "ecmwf-opendata>=0.3.34,<1", "eccodes>=2.42,<3"]
+weather = ["cdsapi>=0.7.7,<1", "ecmwf-opendata>=0.3.35,<1", "eccodes>=2.42,<3", "requests>=2.32,<3"]
 dev = ["pytest>=8,<10", "httpx>=0.27,<1"]
 
 [project.scripts]
@@ -25,6 +25,7 @@ balloon-predictor = "balloon_predictor.cli:main"
 include = ["balloon_predictor*"]
 
 [tool.setuptools.package-data]
+"balloon_predictor" = ["sonde_schema.json"]
 "balloon_predictor.weather.era5_native" = ["l137.csv", "LICENSE.txt"]
 
 [tool.pytest.ini_options]

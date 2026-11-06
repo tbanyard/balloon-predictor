@@ -1,0 +1,13 @@
+arrival_datetime: '2026-11-05T18:00:00Z'
+target_altitude: 20000
+ascent_rates: [5, 4, 3, 2]
+flights:
+  - dataset: demo
+    flight_name: Formation launch
+    launch_datetime: '2026-11-05T12:00:00Z' # Placeholder; launch UTC is solved.
+    launch_latitude: 52.817208
+    launch_longitude: -4.125
+    launch_altitude: 100
+    ascent_rate: 5
+    burst_altitude: 25000
+    max_duration_hours: 12

@@ -1,0 +1,10 @@
+# Update these UTC dates to a recent available forecast window before use.
+source: gfs
+name: gfs-regional
+start: '2026-11-05T15:00:00Z'
+end: '2026-11-06T03:00:00Z'
+area: [60, -12, 48, 5]  # north, west, south, east
+grid: 0.25
+surface: true
+refresh: false
+# cycle: '2026-11-05T06:00:00Z'  # Omit for the latest available recent run.

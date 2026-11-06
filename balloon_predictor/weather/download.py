@@ -52,6 +52,7 @@ def cached_retrieve(cache_dir, signature, retrieve, refresh=False):
 def download_era5(request, settings, progress):
     now = datetime.now(timezone.utc)
     first, last = hourly_window(request.start, request.end)
+    check_download_size(request, settings, int((last-first).total_seconds()/3600)+1, len(ERA5_LEVELS), request.grid)
     # Availability can vary by day; the remote service remains authoritative.
     if last.date() > (now - timedelta(days=5)).date():
         raise PredictorError("ERA5/ERA5T is retrospective, usually at least five days behind real time. For future launches select ECMWF operational (IFS).")
@@ -79,10 +80,10 @@ def download_era5(request, settings, progress):
                   "area": list(request.area), "grid": [request.grid, request.grid]}
         jobs = [("reanalysis-era5-pressure-levels",
                  {**common, "pressure_level": [str(p) for p in ERA5_LEVELS],
-                  "variable": ["u_component_of_wind", "v_component_of_wind", "temperature", "geopotential", "vertical_velocity"]})]
+                  "variable": ["u_component_of_wind", "v_component_of_wind", "temperature", "geopotential", "vertical_velocity", "specific_humidity"]})]
         if request.surface:
             jobs.append(("reanalysis-era5-single-levels", {**common, "variable": [
-                "10m_u_component_of_wind", "10m_v_component_of_wind", "2m_temperature", "surface_pressure", "geopotential"]}))
+                "10m_u_component_of_wind", "10m_v_component_of_wind", "2m_temperature", "2m_dewpoint_temperature", "surface_pressure", "geopotential"]}))
         for dataset, selection in jobs:
             progress(f"Retrieving {day} · {dataset}. CDS may queue this request; predictions reuse the local cache.")
             def retrieve(target, dataset=dataset, selection=selection):
@@ -109,15 +110,24 @@ def download_era5(request, settings, progress):
     return ds
 
 
-def forecast_steps(cycle, start, end):
-    valid = list(range(0, 145, 3)) + list(range(150, 241, 6)) if cycle.hour in (0, 12) else list(range(0, 91, 3))
+def forecast_steps(cycle, start, end, source="ifs"):
+    if source == "gfs":
+        valid = list(range(0, 121)) + list(range(123, 385, 3))
+    else:
+        valid = list(range(0, 145, 3)) + list(range(150, 361, 6)) if cycle.hour in (0, 12) else list(range(0, 145, 3))
     lo = (start - cycle).total_seconds() / 3600
     hi = (end - cycle).total_seconds() / 3600
     if lo < 0 or hi > valid[-1]:
-        raise PredictorError(f"Requested flight window is outside this IFS cycle. Available steps: 0–{valid[-1]} hours. Select a newer cycle or a shorter window.")
+        raise PredictorError(f"Requested flight window is outside this {source.upper()} cycle. Available steps: 0–{valid[-1]} hours. Select a newer cycle or a shorter window.")
     left = max(step for step in valid if step <= lo)
     right = min(step for step in valid if step >= hi)
     return [step for step in valid if left <= step <= right]
+
+
+def ifs_stream(cycle):
+    # ECMWF moved 06/18 UTC runs to oper with IFS cycle 50r1.
+    # Use explicit streams because infer_stream_keyword is deliberately disabled.
+    return "oper" if cycle.hour in (0,12) or cycle.strftime("%Y%m%d") >= "20260512" else "scda"
 
 
 def download_ifs(request, settings, progress):
@@ -141,12 +151,14 @@ def download_ifs(request, settings, progress):
             raise PredictorError("Could not locate an IFS forecast cycle. Check internet access and ECMWF open-data service status, or specify a cycle.")
         cycle = max(candidates)
     steps = forecast_steps(cycle, request.start, request.end)
-    common = {"date": cycle.strftime("%Y%m%d"), "time": cycle.hour, "stream": "oper", "type": "fc"}
+    check_download_size(request, settings, len(steps), len(IFS_LEVELS))
+    common = {"date": cycle.strftime("%Y%m%d"), "time": cycle.hour,
+              "stream": ifs_stream(cycle), "type": "fc"}
     files = []
     for step in steps:
-        selections = [{**common, "step": step, "levtype": "pl", "levelist": IFS_LEVELS, "param": ["u", "v", "t", "gh"]}]
+        selections = [{**common, "step": step, "levtype": "pl", "levelist": IFS_LEVELS, "param": ["u", "v", "t", "gh", "q", "w"]}]
         if request.surface:
-            selections.append({**common, "step": step, "levtype": "sfc", "param": ["10u", "10v", "2t", "sp"]})
+            selections.append({**common, "step": step, "levtype": "sfc", "param": ["10u", "10v", "2t", "2d", "sp"]})
         for selection in selections:
             progress(f"Retrieving IFS {cycle:%Y-%m-%d %H} UTC · step {step}h · {selection['levtype']} (global fields, then cropped)")
             def retrieve(target, selection=selection):
@@ -155,6 +167,7 @@ def download_ifs(request, settings, progress):
                 except Exception as exc:
                     raise PredictorError("IFS download failed. Check cycle availability and ECMWF service status. Historical cycles are retained only briefly; use archived local files for backtesting.") from exc
             files.append(cached_retrieve(settings.data_dir / "cache", {"provider": "ifs", "request": selection}, retrieve, request.refresh))
+    terrain_note = None
     if request.surface:
         selection = {**common, "step": 0, "levtype": "sfc", "param": ["z"]}
         def retrieve_terrain(target):
@@ -162,9 +175,16 @@ def download_ifs(request, settings, progress):
                 client.retrieve(**selection, target=str(target))
             except Exception as exc:
                 raise PredictorError("IFS terrain download failed; retry or import without surface data and use fixed landing altitude.") from exc
-        files.append(cached_retrieve(settings.data_dir / "cache", {"provider": "ifs", "request": selection}, retrieve_terrain, request.refresh))
+        try:
+            files.append(cached_retrieve(settings.data_dir / "cache", {"provider": "ifs", "request": selection}, retrieve_terrain, request.refresh))
+        except PredictorError:
+            terrain_note = "IFS surface geopotential was unavailable. Surface fields were retained; use fixed landing altitude if no terrain is present."
     progress("Converting and cropping IFS fields")
-    ds = read_grib(files, area=request.area, attrs={"source": "ifs", "label": f"{request.name} · IFS {cycle:%d %b %H}Z"})
+    ds = read_grib(files, area=request.area, expected_cycle=cycle,
+                   attrs={"source": "ifs", "label": f"{request.name} · IFS {cycle:%d %b %H}Z"})
+    check_forecast_coverage(ds, request)
+    if terrain_note:
+        ds.attrs["warnings_json"] = json.dumps(json.loads(ds.attrs["warnings_json"]) + [terrain_note])
     provenance = json.loads(ds.attrs["provenance_json"])
     provenance.update({"provider": "ECMWF IFS open data", "cycle": cycle.isoformat(), "forecast_steps_hours": steps,
                        "horizontal_grid_degrees": 0.25, "attribution": "ECMWF, CC BY 4.0"})
@@ -174,4 +194,24 @@ def download_ifs(request, settings, progress):
 
 def download_weather(request, settings, progress=lambda message: None):
     settings.prepare()
-    return download_ifs(request, settings, progress) if request.source == "ifs" else download_era5(request, settings, progress)
+    if request.source == "ifs":
+        return download_ifs(request, settings, progress)
+    if request.source == "gfs":
+        from .gfs import download_gfs
+        return download_gfs(request, settings, progress)
+    return download_era5(request, settings, progress)
+
+
+def check_forecast_coverage(ds, request):
+    if ds.time.values[0] > as_np_time(request.start) or ds.time.values[-1] < as_np_time(request.end):
+        ds.close()
+        raise PredictorError("Downloaded forecast does not bracket the requested UTC window. The run may still be publishing; try an earlier cycle.")
+
+
+def check_download_size(request, settings, time_count, level_count, grid=.25):
+    import math
+    north, west, south, east = request.area
+    points = (math.ceil((north-south)/grid)+1) * (math.ceil((east-west)/grid)+1)
+    estimated_mb = time_count * level_count * points * 7 * 4 / 1024**2
+    if estimated_mb > settings.max_weather_mb:
+        raise PredictorError(f"This weather selection would need about {estimated_mb:.0f} MB of atmospheric arrays, above max_weather_mb={settings.max_weather_mb}. Reduce the area/time window before downloading.")

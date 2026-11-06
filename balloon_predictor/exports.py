@@ -4,6 +4,24 @@ import json
 from xml.etree.ElementTree import Element, SubElement, tostring, fromstring
 
 
+def arrival_csv_export(result):
+    from .errors import PredictorError
+    if result.get("schedule_type") != "coordinated":
+        raise PredictorError("A launch timetable is available only for a coordinated arrival plan.")
+    buffer = StringIO(newline="")
+    writer = csv.writer(buffer)
+    writer.writerow(["flight_index", "flight_name", "status", "ascent_rate_m_s", "launch_utc",
+                     "requested_arrival_utc", "actual_arrival_utc", "target_altitude_m_amsl",
+                     "arrival_latitude", "arrival_longitude", "arrival_error_seconds", "error"])
+    for entry in sorted(result["flights"], key=lambda value:value["launch_datetime"]):
+        point = entry.get("result", {}).get("summary", {}).get("burst", {})
+        writer.writerow([entry["index"], entry["flight_name"], entry["status"], entry["ascent_rate"],
+            entry["launch_datetime"], result["arrival_datetime"], point.get("datetime", ""),
+            result["target_altitude"], point.get("latitude", ""), point.get("longitude", ""),
+            entry.get("arrival_error_seconds", ""), entry.get("error", "")])
+    return buffer.getvalue()
+
+
 def segments(points):
     """Split at ±180°, adding an interpolated crossing rather than a world-spanning line."""
     result = [[]]

@@ -84,6 +84,26 @@ ratios. u and v use separate lines versus sampled altitude in km AMSL, with
 positive values eastward and northward respectively. Exported sounding CSV
 keeps the numeric data independent of the SVG's plotting range.
 
+## Coordinated arrivals and sonde files (v1.2)
+
+Operational IFS/GFS pressure fields use the same column-wise spatial/altitude/
+UTC sampling as other pressure imports. Missing optional vertical motion is
+allowed when it is disabled; requesting it where it is absent causes a coverage
+error. Humidity is preserved when available, with no synthetic surface zero.
+
+Coordinated plans first estimate launch UTC from altitude gain and ascent rate,
+then simulate each ascent. Optional atmospheric vertical wind triggers iterative
+timing correction. The accepted arrival-time residual is at most 0.25 s; failed
+coverage/nonconvergence is reported per balloon. Shared altitude/time does not
+imply a straight line of positions. These are deterministic scenario calculations.
+
+The sonde export samples the atmosphere along the interpolated predicted track
+at 1 Hz. It preserves the supplied 22-variable file structure, while updating
+metadata to identify a model simulation. Observational vertical perturbation/
+noise fields are missing. Fractional terminal seconds are retained as exact-event
+metadata rather than rounded into the integer-second time coordinate. See
+[docs/V1.2.md](docs/V1.2.md) for the format and physical limitations.
+
 ## References
 
 - [ECMWF model-level pressure, geopotential and height](https://confluence.ecmwf.int/spaces/CKB/pages/158636068/ERA5+compute+pressure+and+geopotential+on+model+levels+geopotential+height+and+geometric+height)

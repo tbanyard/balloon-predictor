@@ -46,6 +46,8 @@ def run_flight(request, weather, wind_bias=(0, 0)):
             if request.descent_model == "density":
                 vertical *= math.sqrt(RHO_REF / sample.density)
         if request.use_vertical_wind:
+            if not math.isfinite(sample.w):
+                raise CoverageError("Atmospheric vertical wind is missing along this flight. Disable vertical wind or choose a dataset with coverage at this altitude.")
             vertical += sample.w
         radius = EARTH_RADIUS + s[2]
         return np.array([(sample.v + wind_bias[1]) / radius * 180 / math.pi,

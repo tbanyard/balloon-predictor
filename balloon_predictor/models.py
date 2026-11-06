@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -69,8 +69,31 @@ class BatchPredictionRequest(StrictModel):
         return self
 
 
+class ArrivalPlanRequest(StrictModel):
+    flights: list[PredictionRequest] = Field(min_length=1, max_length=20)
+    arrival_datetime: datetime
+    target_altitude: float = Field(default=20000, gt=0, le=55000)
+    ascent_rates: list[Annotated[float, Field(gt=0, le=30)]] | None = Field(
+        default=[5, 4, 3, 2], min_length=1, max_length=20)
+
+    @field_validator("arrival_datetime")
+    @classmethod
+    def arrival_utc(cls, value):
+        if value.tzinfo is None:
+            raise ValueError("Arrival time must include Z or a UTC offset.")
+        return value.astimezone(timezone.utc)
+
+    @model_validator(mode="after")
+    def check_plan(self):
+        if len(self.flights) * len(self.ascent_rates or [0]) > 80:
+            raise ValueError("A coordinated plan can contain at most 80 balloons.")
+        if any(self.target_altitude <= f.launch_altitude for f in self.flights):
+            raise ValueError("Target altitude must be above every launch altitude (AMSL).")
+        return self
+
+
 class DownloadRequest(StrictModel):
-    source: Literal["era5", "era5t", "ifs"]
+    source: Literal["era5", "era5t", "ifs", "gfs"]
     name: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     start: datetime
     end: datetime
@@ -99,5 +122,7 @@ class DownloadRequest(StrictModel):
         if not (-90 <= s < n <= 90 and -180 <= w < e <= 180):
             raise ValueError("Area is [north, west, south, east]; use a non-dateline-crossing area.")
         if self.cycle and (self.cycle.hour not in (0, 6, 12, 18) or self.cycle.minute or self.cycle.second):
-            raise ValueError("IFS cycle must be 00, 06, 12 or 18 UTC on the hour.")
+            raise ValueError("Forecast cycle must be 00, 06, 12 or 18 UTC on the hour.")
+        if self.source in ("ifs", "gfs") and self.grid != .25:
+            raise ValueError("Operational IFS/GFS downloads use the 0.25-degree product.")
         return self

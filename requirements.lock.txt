@@ -1,4 +1,4 @@
-# Tested dependency snapshot for Python 3.12, generated 2026-10-13.
+# Tested dependency snapshot for Python 3.12, updated 2026-11-05.
 # No editable installation is needed for server.py / start.sh.
 annotated-doc==0.0.5
 annotated-types==0.8.0
@@ -14,7 +14,7 @@ eccodes==2.49.0
 eccodeslib==2.49.0.30
 eckitlib==2.3.0.30
 ecmwf-datastores-client==0.5.3
-ecmwf-opendata==0.3.34
+ecmwf-opendata==0.3.35
 fastapi==0.143.0
 filelock==3.32.7
 findlibs==0.1.3

@@ -9,11 +9,13 @@ import uuid
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from . import __version__
 from .errors import PredictorError
-from .exports import csv_export, geojson, kml_export
-from .models import BatchPredictionRequest, DownloadRequest, PredictionRequest
+from .exports import arrival_csv_export, csv_export, geojson, kml_export
+from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest
+from .coordination import plan_arrivals
 from .predictor import predict, predict_batch
 from .settings import ROOT, Settings
 from .store import WeatherStore, atomic_json
@@ -154,6 +156,10 @@ def create_app(settings=None):
     def prediction_series(body: BatchPredictionRequest):
         return jobs.submit("prediction",lambda progress:predict_batch(body,store,progress))
 
+    @app.post("/api/predictions/arrival", status_code=202)
+    def prediction_arrival(body: ArrivalPlanRequest):
+        return jobs.submit("prediction", lambda progress: plan_arrivals(body, store, progress))
+
     @app.post("/predict")
     def synchronous_prediction(body: PredictionRequest):
         """Convenient synchronous endpoint for scripts; UI uses jobs."""
@@ -184,7 +190,25 @@ def create_app(settings=None):
             if entry is None or entry["status"]!="completed":
                 raise HTTPException(404,"This launch has no completed prediction.")
             result=entry["result"]
+        elif flight_index != 0:
+            raise HTTPException(404, "This prediction contains only flight index 0.")
         return result
+
+    @app.get("/api/predictions/{job_id}/sonde.nc")
+    def sonde_export(job_id: str, flight_index: int = Query(default=0, ge=0), scope: str = "ascent"):
+        from .sonde import write_sonde
+        result = selected_result(job_id, flight_index)
+        body = PredictionRequest.model_validate(result["request"])
+        weather = store.get(body.dataset, body.launch_datetime)
+        path = settings.data_dir / "results" / (uuid.uuid4().hex + ".sonde.nc")
+        try:
+            write_sonde(path, result, weather, scope)
+        except Exception:
+            path.unlink(missing_ok=True)
+            raise
+        return FileResponse(path, media_type="application/x-netcdf",
+            filename=f"model-sonde-{body.launch_datetime:%Y%m%dT%H%M%SZ}-{job_id[:8]}-{flight_index}.nc",
+            background=BackgroundTask(path.unlink, missing_ok=True))
 
     @app.get("/api/predictions/{job_id}/sounding")
     def sounding(job_id: str, flight_index: int = Query(default=0,ge=0), mode: str = "ascent"):
@@ -240,10 +264,11 @@ def create_app(settings=None):
             raise HTTPException(409, "Prediction is not complete.")
         result = job["result"]
         formats = {"csv": (csv_export, "text/csv", "csv"), "geojson": (geojson, "application/geo+json", "geojson"),
+                   "schedule": (arrival_csv_export, "text/csv", "csv"),
                    "kml": (kml_export, "application/vnd.google-earth.kml+xml", "kml"),
                    "json": (lambda value: value, "application/json", "json")}
         if format not in formats:
-            raise HTTPException(404, "Use csv, geojson, kml or json.")
+            raise HTTPException(404, "Use csv, geojson, kml, json or schedule (coordinated plans).")
         writer, media, extension = formats[format]
         data = writer(result)
         if isinstance(data, dict):

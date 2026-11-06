@@ -9,7 +9,7 @@ import yaml
 
 from .errors import PredictorError
 from .exports import csv_export, geojson, kml_export
-from .models import BatchPredictionRequest, DownloadRequest, PredictionRequest
+from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest
 from .predictor import predict, predict_batch
 from .settings import Settings
 from .store import NETCDF_LOCK, WeatherStore, atomic_json
@@ -52,12 +52,12 @@ def import_files(store, name, kind, files, area=None, start=None, end=None, labe
 
 
 def build_parser():
-    parser = argparse.ArgumentParser(description="Balloon Predictor — local ERA5 / ERA5T / IFS / WRF")
+    parser = argparse.ArgumentParser(description="Balloon Predictor — local ERA5 / ERA5T / IFS / GFS / WRF")
     parser.add_argument("--config", help="Configuration YAML (default config.yml beside the project)")
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="Start the local map and API")
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8000)
+    serve.add_argument("--port", type=int, default=8001)
     serve.add_argument("--reload", action="store_true")
     serve.add_argument("--config",dest="serve_config",help="Personal configuration YAML")
     serve.add_argument("--era5-root",help="Local ERA5 viewer archive directory")
@@ -69,7 +69,7 @@ def build_parser():
     download = sub.add_parser("download", help="Download weather using a YAML or JSON request")
     download.add_argument("request_file")
     download.add_argument("--overwrite", action="store_true")
-    for command, kind in (("import-wrf", "wrf"), ("import-era5", "era5"), ("import-ifs", "ifs")):
+    for command, kind in (("import-wrf", "wrf"), ("import-era5", "era5"), ("import-ifs", "ifs"), ("import-gfs", "gfs")):
         imp = sub.add_parser(command, help=f"Import local {kind} weather files")
         imp.add_argument("--name", required=True)
         imp.add_argument("--label")
@@ -87,6 +87,9 @@ def build_parser():
     series=sub.add_parser("predict-series",help="Calculate a repeated launch series from YAML/JSON")
     series.add_argument("request_file")
     series.add_argument("--output",default="data/results/series",help="Filename prefix for JSON/CSV/GeoJSON/KML")
+    arrival = sub.add_parser("plan-arrival", help="Coordinate balloons at one altitude and UTC time")
+    arrival.add_argument("request_file")
+    arrival.add_argument("--output", default="data/results/arrival", help="Filename prefix for JSON/CSV/GeoJSON/KML")
     return parser
 
 
@@ -142,8 +145,8 @@ def main(argv=None):
                 if not definition.get("enabled", True):
                     continue
                 kind = definition["source"]
-                if kind not in ("wrf", "era5", "era5t", "ifs"):
-                    raise PredictorError("Configured imports must use wrf, era5, era5t or ifs.")
+                if kind not in ("wrf", "era5", "era5t", "ifs", "gfs"):
+                    raise PredictorError("Configured imports must use wrf, era5, era5t, ifs or gfs.")
                 files = expand_files(definition["files"], settings.config_path.parent)
                 print(json.dumps(import_files(store, definition["name"], kind, files, definition.get("area"),
                                               definition.get("start"), definition.get("end"), definition.get("label"),
@@ -151,9 +154,13 @@ def main(argv=None):
                 imported += 1
             if not imported:
                 print("No enabled dataset definitions. Edit config.yml first.")
-        elif args.command in ("predict","predict-series"):
+        elif args.command in ("predict","predict-series","plan-arrival"):
             progress=lambda message:print(message,flush=True)
-            if args.command=="predict-series":
+            if args.command=="plan-arrival":
+                from .coordination import plan_arrivals
+                body=ArrivalPlanRequest.model_validate(load_request(args.request_file))
+                result=plan_arrivals(body,store,progress)
+            elif args.command=="predict-series":
                 body=BatchPredictionRequest.model_validate(load_request(args.request_file))
                 result=predict_batch(body,store,progress)
             else:

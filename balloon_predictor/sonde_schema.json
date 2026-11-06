@@ -1,0 +1,374 @@
+{
+  "format": "NETCDF4",
+  "dimension": "time",
+  "variables": {
+    "timePeriod": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Elapsed Time",
+        "units": "s",
+        "name": "Elapsed Time Since Launch from Original Data Source"
+      },
+      "nan_fill": true
+    },
+    "lat": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Latitude",
+        "units": "degrees_north",
+        "standard_name": "latitude",
+        "axis": "Y",
+        "name": "Latitude"
+      },
+      "nan_fill": true
+    },
+    "lon": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Longitude",
+        "units": "degrees_east",
+        "standard_name": "longitude",
+        "axis": "X",
+        "name": "Longitude"
+      },
+      "nan_fill": true
+    },
+    "alt": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Geometric height above geoid (WGS84)",
+        "units": "m",
+        "standard_name": "altitude",
+        "axis": "Z",
+        "name": "Altitude"
+      },
+      "nan_fill": true
+    },
+    "pressure": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Air Pressure",
+        "units": "hPa",
+        "standard_name": "air_pressure",
+        "name": "Pressure"
+      },
+      "nan_fill": true
+    },
+    "temp": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Air Temperature",
+        "units": "K",
+        "standard_name": "air_temperature",
+        "name": "Temperature"
+      },
+      "nan_fill": true
+    },
+    "dewp": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Dew Point Temperature",
+        "units": "K",
+        "standard_name": "dew_point_temperature",
+        "name": "Dewpoint"
+      },
+      "nan_fill": true
+    },
+    "relative_humidity": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Relative Humidity",
+        "units": "%",
+        "standard_name": "relative_humidity",
+        "name": "Relative Humidity"
+      },
+      "nan_fill": true
+    },
+    "specific_humidity": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Specific Humidity",
+        "units": "kg kg-1",
+        "standard_name": "specific_humidity"
+      },
+      "nan_fill": true
+    },
+    "vel_h": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Horizontal Wind Velocity",
+        "units": "m s-1",
+        "standard_name": "wind_speed",
+        "name": "Wind Speed"
+      },
+      "nan_fill": true
+    },
+    "windDir": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Wind From Direction",
+        "units": "degree",
+        "name": "Wind Direction (opposite of heading)",
+        "description": "Direction the wind is coming from, measured in degrees clockwise from north. Opposite of the radiosonde heading."
+      },
+      "nan_fill": true
+    },
+    "u": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "name": "Zonal wind",
+        "units": "m s-1",
+        "standard_name": "eastward_wind"
+      },
+      "nan_fill": true
+    },
+    "v": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "name": "Meridional wind",
+        "units": "m s-1",
+        "standard_name": "northward_wind"
+      },
+      "nan_fill": true
+    },
+    "vel_z": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Balloon Ascent Rate",
+        "units": "m s-1",
+        "name": "Upward Balloon Velocity"
+      },
+      "nan_fill": true
+    },
+    "vel_z_smoothed": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Smoothed balloon ascent rate",
+        "description": "Represents the large-scale ascent attributed to the balloon buoyancy. Computed using a Savitzky-Golay filter (window=301s, polyorder=2).",
+        "units": "m s-1"
+      },
+      "nan_fill": true
+    },
+    "vel_z_prime": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Vertical velocity perturbation",
+        "description": "Represents the vertical wind velocity attributed to both sensor noise + turbulence + gravity waves. vel_z = vel_z_smoothed + vel_z_prime.",
+        "units": "m s-1"
+      },
+      "nan_fill": true
+    },
+    "vel_z_prime_smoothed": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Smoothed vertical velocity perturbation",
+        "description": "Represents the vertical wind velocity attributed to gravity waves. Small-scale turbulence has been removed using a rolling mean with ~100 m vertical window, followed by sensor noise removed using a rolling mean with a ~15 m vertical window.",
+        "units": "m s-1"
+      },
+      "nan_fill": true
+    },
+    "PotTemp": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Potential Temperature",
+        "units": "K",
+        "standard_name": "air_potential_temperature"
+      },
+      "nan_fill": true
+    },
+    "CompRng": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Range of Radiosonde from Launch Site",
+        "units": "m"
+      },
+      "nan_fill": true
+    },
+    "CompAz": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "long_name": "Azimuth from Launch Site",
+        "units": "degrees clockwise from north"
+      },
+      "nan_fill": true
+    },
+    "heading": {
+      "dtype": "float64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "units": "degrees clockwise from north",
+        "name": "Radiosonde Heading"
+      },
+      "nan_fill": true
+    },
+    "time": {
+      "dtype": "int64",
+      "dimensions": [
+        "time"
+      ],
+      "attributes": {
+        "name": "Date and Time",
+        "standard_name": "time",
+        "axis": "T",
+        "long_name": "Time",
+        "units": "seconds since 1970-01-01 00:00:00",
+        "calendar": "proleptic_gregorian"
+      },
+      "nan_fill": false
+    }
+  },
+  "global_attributes": {
+    "Conventions": {
+      "dtype": "str"
+    },
+    "title": {
+      "dtype": "str"
+    },
+    "project": {
+      "dtype": "str"
+    },
+    "source": {
+      "dtype": "str"
+    },
+    "history": {
+      "dtype": "str"
+    },
+    "processing_level": {
+      "dtype": "int32"
+    },
+    "acknowledgement": {
+      "dtype": "str"
+    },
+    "contact": {
+      "dtype": "str"
+    },
+    "institution": {
+      "dtype": "str"
+    },
+    "date_created": {
+      "dtype": "str"
+    },
+    "featureType": {
+      "dtype": "str"
+    },
+    "site_name": {
+      "dtype": "str"
+    },
+    "serial": {
+      "dtype": "str"
+    },
+    "startdate": {
+      "dtype": "str"
+    },
+    "starttime": {
+      "dtype": "str"
+    },
+    "originalFile": {
+      "dtype": "str"
+    },
+    "balloonreleasetime_nph": {
+      "dtype": "str"
+    },
+    "balloonreleasedate_nph": {
+      "dtype": "str"
+    },
+    "originalFileCreationDate_nph": {
+      "dtype": "str"
+    },
+    "originalFile_nph": {
+      "dtype": "str"
+    },
+    "softwareVersion": {
+      "dtype": "str"
+    },
+    "laptop": {
+      "dtype": "str"
+    },
+    "heightOfStationGroundAboveMeanSeaLevel": {
+      "dtype": "float64"
+    },
+    "startLatitude": {
+      "dtype": "float64"
+    },
+    "startLongitude": {
+      "dtype": "float64"
+    },
+    "surfaceTemperature_C": {
+      "dtype": "float64"
+    },
+    "surfaceWindDir": {
+      "dtype": "int64"
+    },
+    "surfaceHumidity": {
+      "dtype": "str"
+    },
+    "surfacePressure": {
+      "dtype": "str"
+    },
+    "launch_time": {
+      "dtype": "str"
+    }
+  }
+}
