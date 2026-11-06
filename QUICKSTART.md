@@ -1,10 +1,10 @@
-# BalloonPredictor v1.2
+# BalloonPredictor v1.3
 
-Extract the ZIP into `/data1/tim`. Its `balloon-predictor-v1.2` folder can sit
-beside the existing v1.1 installation. Python 3.12+ is required.
+Extract the ZIP into `/data1/tim`. Its `balloon-predictor-v1.3` folder can sit
+beside the existing v1.2 installation. Python 3.12+ is required.
 
 ```bash
-cd /data1/tim/balloon-predictor-v1.2
+cd /data1/tim/balloon-predictor-v1.3
 bash start.sh
 ```
 
@@ -21,8 +21,8 @@ bash start.sh
 Or create a new environment, from the extracted project directory:
 
 ```bash
-conda create -n balloon-predictor-v12 -c conda-forge python=3.12 pip gh git
-conda activate balloon-predictor-v12
+conda create -n balloon-predictor-v13 -c conda-forge python=3.12 pip gh git
+conda activate balloon-predictor-v13
 python -m pip install -r requirements.lock.txt
 bash start.sh
 ```
@@ -97,4 +97,27 @@ in `config.yml`, or pass `bash start.sh --config /path/to/config.yml`.
 Launch tabs, repeated schedules, sensitivity members, landing/burst comparisons,
 Skew-T/u-v plots, setup import/export and JSON/CSV/GeoJSON/KML remain available.
 Real WRF support still depends on the variables in [docs/WRF.md](docs/WRF.md).
-See [docs/GIT.md](docs/GIT.md) for GitHub updates and the `v1.2.0` release tag.
+See [docs/GIT.md](docs/GIT.md) for GitHub updates and the `v1.3.0` release tag.
+
+## New v1.3 controls
+
+Use **Ground & model mismatch** to enter the physical site elevation or select
+high-resolution terrain. **Check ground** compares it with model orography
+without changing the entered launch altitude. For realistic coastal landings,
+select **Physical high-resolution DEM** as the landing surface and add tiles
+covering the route. The default bridge approximation is labelled in results;
+select Strict when you require fully resolved model air.
+
+**Manage weather** shows the actual save directories and offers separate cleanup
+buttons for raw cache, named datasets, and prediction/export files. It can also
+download one public GLO-30 launch tile or use your own regional GeoTIFFs.
+
+Beside the sonde export, **Download model box NetCDF** exports all available
+levels and bracketing model times, with a ≥0.5° / 50 km margin. It has independent
+full-flight/ascent and selected-flight/whole-plan choices. Writing runs as a job;
+use the resulting save link to download it again if needed.
+
+The header Controls button opens a left drawer on phones. Desktop panels have
+maximise/restore, edge/corner resize and a docked Map/Profile split divider.
+
+Details and limitations: [docs/V1.3.md](docs/V1.3.md).

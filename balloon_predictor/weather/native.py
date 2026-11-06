@@ -13,6 +13,7 @@ import numpy as np
 from netCDF4 import Dataset, num2date
 
 from ..errors import CoverageError, PredictorError
+from ..provenance import record_file
 from .era5_native.data import Archive, DataError, decode, open_nc, iso
 from .era5_native.physics import full_pressure, hydrostatic_height
 from .interpolate import DatasetWeather
@@ -122,6 +123,10 @@ class NativeWeather(DatasetWeather):
 class ERA5Weather(NativeWeather):
     def __init__(self, archive, when, cache, max_gap):
         self.archive, self.cache, self.max_gap = archive, cache, max_gap
+        self.source_receipts = {}
+        if archive.topography:
+            if record_file(self, archive.root / "era5_topo.nc") != archive.topography["input_receipt"]:
+                raise PredictorError("ERA5 topography changed after indexing. Rescan local data before predicting.")
         self.loaded_days = set()
         self.records = []
         self.ensure_time(when)
@@ -160,6 +165,7 @@ class ERA5Weather(NativeWeather):
     def raw_column(self, ti, y, x):
         _, fid, index = self.records[ti]
         meta = self.archive.meta(fid)
+        record_file(self, meta["path"])
         for warning in meta["warnings"]:
             if warning not in self.info["warnings"]:
                 self.info["warnings"].append(warning)
@@ -311,6 +317,8 @@ class WRFWeather(NativeWeather):
         self.times = np.array([r[0] for r in self.records])
         self.checked_grids = set()
         _, path, ti = self.records[0]
+        self.source_receipts = {}
+        record_file(self, path)
         with Dataset(path) as nc:
             def grid(name):
                 var = nc.variables[name]
@@ -326,6 +334,7 @@ class WRFWeather(NativeWeather):
     def raw_column(self, ti, y, x):
         _, path, index = self.records[ti]
         stat = Path(path).stat()
+        record_file(self, path)
         key = ("wrf", path, stat.st_mtime_ns, stat.st_size, index, y, x)
         cached = self.cache.get(key)
         if cached is not None:

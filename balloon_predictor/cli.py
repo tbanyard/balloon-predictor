@@ -113,6 +113,10 @@ def main(argv=None):
             settings.cache_mb=max(16,args.cache_mb)
             os.environ["BP_CACHE_MB"]=str(settings.cache_mb)
     store = WeatherStore(settings)
+    from .storage import activity
+    lease = activity(settings) if args.command != "serve" else None
+    if lease:
+        lease.__enter__()
     try:
         if args.command == "serve":
             import os
@@ -178,6 +182,9 @@ def main(argv=None):
     except (PredictorError, ValueError, KeyError, OSError) as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 1
+    finally:
+        if lease:
+            lease.__exit__(None, None, None)
 
 
 if __name__ == "__main__":

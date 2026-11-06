@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "balloon-predictor-local"
-version = "1.2.0"
+version = "1.3.0"
 description = "Balloon trajectories with ERA5, operational ECMWF/GFS, native WRF, coordinated arrivals and simulated sonde NetCDF"
 requires-python = ">=3.12"
 license = "MIT"
 dependencies = [
   "numpy>=1.26,<3", "scipy>=1.11,<2", "xarray>=2024.7,<2027", "netCDF4>=1.7,<2",
   "fastapi>=0.115,<1", "uvicorn>=0.30,<1", "pydantic>=2.9,<3", "PyYAML>=6,<7",
-  "python-dotenv>=1,<2", "filelock>=3.15,<4"
+  "python-dotenv>=1,<2", "filelock>=3.15,<4", "rasterio>=1.4,<2"
 ]
 
 [project.optional-dependencies]

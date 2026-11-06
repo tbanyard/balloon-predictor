@@ -220,7 +220,8 @@ class Archive:
             if z.nbytes > self.cache.limit:
                 raise DataError("Topography exceeds the configured cache budget; increase cache_mb.")
             z.flags.writeable = False
-            return {"lat": lat, "lon": lon, "z": z}
+            from ...provenance import receipt
+            return {"lat": lat, "lon": lon, "z": z, "input_receipt": receipt(path)}
 
     def topography_indices(self, lat, lon):
         topo = self.topography

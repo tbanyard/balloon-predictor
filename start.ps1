@@ -2,7 +2,7 @@ $ErrorActionPreference = "Stop"
 Set-Location $PSScriptRoot
 if ($env:CONDA_PREFIX -or $env:VIRTUAL_ENV) {
     $PredictorPython = (Get-Command python).Source
-    & $PredictorPython -c 'import sys; assert sys.version_info >= (3,12); import numpy, scipy, xarray, netCDF4, fastapi, uvicorn, pydantic, yaml, dotenv, filelock'
+    & $PredictorPython -c 'import sys; assert sys.version_info >= (3,12); import numpy, scipy, xarray, netCDF4, fastapi, uvicorn, pydantic, yaml, dotenv, filelock, rasterio'
     if ($LASTEXITCODE -ne 0) { throw "Install Python 3.12+ and run: python -m pip install -r requirements.txt" }
 } else {
     $PredictorEnvironment = if ($env:BALLOONPREDICTOR_VENV) { $env:BALLOONPREDICTOR_VENV } else { Join-Path $env:LOCALAPPDATA "BalloonPredictor\venv" }
@@ -15,7 +15,7 @@ if ($env:CONDA_PREFIX -or $env:VIRTUAL_ENV) {
         & $BootstrapPython -m venv --copies $PredictorEnvironment
         if ($LASTEXITCODE -ne 0) { throw "Could not create the environment." }
     }
-    $Ready = Join-Path $PredictorEnvironment ".balloon-predictor-1.2-ready"
+    $Ready = Join-Path $PredictorEnvironment ".balloon-predictor-1.3-ready"
     if (-not (Test-Path $Ready)) {
         & $PredictorPython -m pip install -r requirements.lock.txt
         if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
@@ -23,6 +23,6 @@ if ($env:CONDA_PREFIX -or $env:VIRTUAL_ENV) {
     }
 }
 if (-not $env:BP_DATA_DIR -and -not $env:BP_CONFIG -and -not ($args | Where-Object { $_ -eq "--config" -or $_ -like "--config=*" })) { $env:BP_DATA_DIR = Join-Path $env:LOCALAPPDATA "BalloonPredictor\data" }
-Write-Host "BalloonPredictor v1.2 · default http://127.0.0.1:8001 · Ctrl+C to stop."
+Write-Host "BalloonPredictor v1.3 · default http://127.0.0.1:8001 · Ctrl+C to stop."
 & $PredictorPython "$PSScriptRoot\server.py" @args
 exit $LASTEXITCODE

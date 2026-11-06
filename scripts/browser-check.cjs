@@ -34,9 +34,9 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   assert(ready,'Server failed: '+logs);browser=await chromium.launch({headless:true, ...(process.env.BP_TEST_CHROME?{executablePath:process.env.BP_TEST_CHROME,args:["--no-sandbox","--disable-dev-shm-usage"]}: {})});const context=await browser.newContext({viewport:{width:1540,height:1000},deviceScaleFactor:1});
   await context.route('https://**/*',route=>route.abort());const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.waitForFunction(()=>document.querySelector('#flight-tabs button'));
-  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.2','Version badge missing');
+  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.3','Version badge missing');
   await page.selectOption('#available-day','2024-01-15');await page.waitForFunction(()=>document.querySelector('#launch_datetime').value.startsWith('2024-01-15T21:00'));
-  await page.fill('#burst_altitude','25000');await page.click('#ground-button');await page.waitForFunction(()=>Number(document.querySelector('#launch_altitude').value)>100);
+  await page.fill('#burst_altitude','25000');await page.fill('#launch_altitude','101');await page.click('#ground-button');await page.waitForFunction(()=>document.querySelector('#ground-comparison').textContent.includes('Model ground:')); 
   await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#flight-result').hidden,{},{timeout:30000});
   assert((await page.textContent('#metric-endpoint-label'))==='LANDING','Landing calculation failed');
   await page.click('#sounding-open');await page.waitForFunction(()=>document.querySelectorAll('#uv-chart path').length===2);
@@ -75,9 +75,9 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   await profile.locator('.window-button').first().click();const locked=await profile.getAttribute('style');await profileHead.focus();await profileHead.press('ArrowRight');assert(await profile.getAttribute('style')===locked,'Locked panel moved');
   await profile.locator('.window-button').first().click();
   await page.screenshot({path:path.join(output,'coordinated-arrival-desktop.png')});
-  await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'mobile-launch-controls.png'),fullPage:true});
+  await page.setViewportSize({width:390,height:844});await page.click('#sidebar-toggle');assert(await page.locator('#sidebar-backdrop').isVisible(),'Mobile drawer backdrop missing');await page.screenshot({path:path.join(output,'mobile-launch-controls.png'),fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+2),'Mobile page overflows horizontally');
-  await page.click('#weather-open');assert(await page.locator('#rescan-weather').isVisible(),'Local rescan missing');await page.selectOption('#download-source','ifs');assert(await page.locator('#cycle-field').isVisible(),'Original download window regressed');await page.click('#weather-close');
+  await page.click('#sidebar-backdrop');await page.click('#weather-open');assert(await page.locator('#rescan-weather').isVisible(),'Local rescan missing');await page.selectOption('#download-source','ifs');assert(await page.locator('#cycle-field').isVisible(),'Original download window regressed');await page.click('#weather-close');
   assert(!errors.length,'Browser errors: '+errors.join('\n'));console.log('Browser regression: PASS · ERA5, WRF, tabs, series, target, soundings, exports, offline coastlines, responsive layout');console.log('Screenshots: '+output);
  }catch(e){console.error(e.stack);if(logs)console.error(logs.slice(-5000));process.exitCode=1;}
  finally{if(browser)await browser.close();server.kill();server.once('exit',()=>fs.rmSync(tmp,{recursive:true,force:true}));}

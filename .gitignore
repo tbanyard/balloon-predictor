@@ -18,3 +18,8 @@ config.local.yaml
 test-output/
 playwright-report/
 *.zip
+
+data/exports/*
+data/locks/*
+data/terrain/*
+!data/**/.gitkeep

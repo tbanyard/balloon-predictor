@@ -34,3 +34,13 @@ https://www.naturalearthdata.com/about/terms-of-use/
 
 Thermodynamic guide equations are described in SCIENCE.md. The SVG plotting
 implementation is local JavaScript; it does not bundle MetPy code or assets.
+
+## Optional downloaded physical terrain (v1.3)
+
+The app can download regional Copernicus GLO-30 Public COG tiles from
+https://copernicus-dem-30m.s3.amazonaws.com/ . No terrain tiles are bundled.
+Copernicus DEM is a DSM including vegetation/buildings; public availability,
+licence and attribution are described at https://registry.opendata.aws/copernicus-dem/
+and https://copernicus-dem-30m.s3.amazonaws.com/readme.html . Users must follow
+the linked Copernicus DEM licence for downloaded data. Rasterio and its bundled
+GDAL dependencies retain their upstream licences in their installed packages.

@@ -127,6 +127,17 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     element("dataset").value="online-gfs";element("dataset").onchange();
     if(!element("weather-dialog").open||element("download-source").value!=="gfs"||element("cycle-field").hidden)throw new Error("Online GFS workflow missing.");
     if(!element("predict-button").disabled)throw new Error("Online source submitted before download.");
+    if(!element("era5-grid-field").hidden)throw new Error("ERA5-only grid is visible for GFS.");
+    if(!element("download-start").checkValidity()||!element("download-end").checkValidity())throw new Error("Suggested forecast minute times are invalid.");
+    // A previously selected ERA5 grid must never leak into a forecast request.
+    element("download-grid").value="1";
+    const realFetch=window.fetch;let sent;
+    window.fetch=async(url,options)=>{
+      if(String(url)==="/api/weather/download"){sent=JSON.parse(options.body);return {ok:false,json:async()=>({detail:"Test intercepted request"})};}
+      return realFetch(url,options);
+    };
+    await element("weather-form").onsubmit({preventDefault(){}});window.fetch=realFetch;
+    if(sent.grid!==.25)throw new Error("Operational forecast inherited ERA5 grid.");
     element("weather-close").onclick();element("dataset").value="demo";element("dataset").onchange();
     element("run_mode").value="arrival";element("arrival_datetime").value="2024-01-15T18:00:00";
     element("arrival_altitude").value="1000";element("arrival_rates").value="5,4,3,2";element("arrival_sites").value="all";
@@ -154,10 +165,41 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     window.BalloonWindows.minimise("sounding-panel");
     if(!panel.hidden)throw new Error("Panel minimise failed.");
     element("restore-sounding").click();if(panel.hidden)throw new Error("Panel restore failed.");
+    // Exercise window state transitions, edge gestures and the mobile drawer.
+    window.BalloonWindows.reset();
+    const mapPanel=element("map-panel"),profile=element("profile-panel"),profileButton=window.document.querySelector('[data-window-open="profile-panel"]');
+    const previousHeight=profile.style.height,previousMap=mapPanel.hidden;
+    profile.querySelector('[aria-label="Maximise profile panel"]').click();
+    if(!mapPanel.hidden||parseFloat(profile.style.height)<680)throw new Error("Maximise did not fill the workspace.");
+    profile.querySelector('[aria-label="Restore profile panel"]').click();
+    if(mapPanel.hidden!==previousMap||profile.style.height!==previousHeight)throw new Error("Maximise restore lost split/visibility.");
+    profileButton.click();if(!profile.hidden)throw new Error("Profile toolbar did not minimise visible panel.");
+    profileButton.click();if(profile.hidden)throw new Error("Profile toolbar did not restore panel.");
+    const divider=window.document.querySelector('.dock-divider'),splitHeight=mapPanel.style.height;
+    divider.dispatchEvent(new window.KeyboardEvent("keydown",{key:"ArrowUp",bubbles:true}));
+    if(parseFloat(mapPanel.style.height)>=parseFloat(splitHeight))throw new Error("Dock divider did not change split ratio.");
+    // Dragging any edge detaches the window without jumping to stale geometry.
+    const west=profile.querySelector('.resize-w'),oldWidth=parseFloat(profile.style.width),oldX=parseFloat(profile.style.left);
+    // First move away from the workspace boundary, then expand the left edge.
+    const profileHead=profile.querySelector('[data-window-handle]');
+    profileHead.dispatchEvent(new window.KeyboardEvent("keydown",{key:"ArrowRight",bubbles:true}));
+    const floatingX=parseFloat(profile.style.left);
+    west.dispatchEvent(new window.MouseEvent("pointerdown",{button:0,clientX:100,clientY:100,bubbles:true}));
+    west.dispatchEvent(new window.MouseEvent("pointermove",{clientX:95,clientY:100,bubbles:true}));
+    west.dispatchEvent(new window.MouseEvent("pointerup",{clientX:95,clientY:100,bubbles:true}));
+    if(parseFloat(profile.style.left)>=floatingX)throw new Error("Left edge did not resize outwards.");
+    window.matchMedia=()=>({matches:true});window.dispatchEvent(new window.Event("resize"));
+    if(element("sidebar-toggle").getAttribute("aria-expanded")!=="false"||!element("sidebar-backdrop").hidden)throw new Error("Mobile drawer initial state wrong.");
+    element("sidebar-toggle").click();
+    if(element("sidebar-backdrop").hidden||element("flight-sidebar").inert)throw new Error("Mobile drawer did not open.");
+    element("sidebar-backdrop").click();
+    if(!element("sidebar-backdrop").hidden||element("sidebar-toggle").getAttribute("aria-expanded")!=="false")throw new Error("Mobile backdrop did not close drawer.");
+    profileButton.click();if(profile.hidden||!mapPanel.hidden)throw new Error("Mobile panels do not switch exclusively.");
+    window.matchMedia=()=>({matches:false});window.dispatchEvent(new window.Event("resize"));
     const icon=window.document.querySelector('link[rel="icon"]');
     if(!(await fetch(new URL(icon.href,base))).ok)throw new Error("Browser tab icon is missing.");
     if (errors.length) throw new Error(errors.join("\n"));
-    process.stdout.write("Frontend DOM integration: PASS · numeric validation, flights, targets, tabs, series, coordinated arrivals, NetCDF, online GFS controls, window movement/lock/resize/restore, sidebar, favicon, soundings and exports\n");
+    process.stdout.write("Frontend DOM integration: PASS · numeric validation, flights, targets, tabs, series, coordinated arrivals, NetCDF, online GFS controls, window edges/maximise/split/toggle, mobile drawer, grid/time validation, storage paths, favicon, soundings and exports\n");
   } catch (error) {
     process.stderr.write(error.stack + "\n");
     process.exitCode = 1;

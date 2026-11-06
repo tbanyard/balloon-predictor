@@ -6,6 +6,7 @@ import numpy as np
 
 from .errors import CoverageError, PredictorError
 from .weather.schema import EARTH_RADIUS
+from .context import flight_weather
 
 RHO_REF = 101325 / (287.05 * 288.15)
 
@@ -19,6 +20,7 @@ def distance_km(a, b):
 
 
 def run_flight(request, weather, wind_bias=(0, 0)):
+    weather = flight_weather(weather, request)
     if request.use_vertical_wind and not weather.info.get("vertical_wind_available"):
         raise PredictorError("Vertical wind was requested, but this dataset does not provide it.")
     state = np.array([request.launch_latitude, request.launch_longitude, request.launch_altitude], dtype=float)
@@ -29,10 +31,11 @@ def run_flight(request, weather, wind_bias=(0, 0)):
     paths = {"ascent": [], "descent": []}
 
     def ground(s):
-        return weather.terrain(s[0], s[1]) if request.landing_mode == "terrain" else request.landing_altitude
+        return (weather.terrain(s[0], s[1]) if request.landing_mode == "terrain" else
+                weather.dem(s[0], s[1]) if request.landing_mode == "dem" else request.landing_altitude)
 
-    launch_ground = weather.terrain(state[0], state[1]) if weather.info.get("terrain_available") else ground(state)
-    if state[2] < launch_ground - 1:
+    launch_ground = weather.launch_ground()
+    if launch_ground is not None and state[2] < launch_ground - 1:
         raise PredictorError(f"Launch altitude is below ground ({launch_ground:.0f} m AMSL). Increase launch altitude.")
 
     def velocity(s, seconds):
@@ -128,7 +131,17 @@ def run_flight(request, weather, wind_bias=(0, 0)):
 
 
 def predict(request, weather, progress=None):
+    weather = flight_weather(weather, request)
     result = run_flight(request, weather)
+    physical = weather.info["physical_ground"]
+    physical["launch_altitude_m"] = request.launch_altitude
+    physical["physical_ground_m"] = weather.launch_ground()
+    try:
+        physical["model_ground_m"] = weather.terrain(request.launch_latitude, request.launch_longitude)
+        if physical["physical_ground_m"] is not None:
+            physical["model_minus_physical_m"] = physical["model_ground_m"] - physical["physical_ground_m"]
+    except PredictorError:
+        physical["model_ground_m"] = None
     result["request"] = request.model_dump(mode="json")
     result["weather"] = weather.info
     result["warnings"] = list(weather.info.get("warnings", []))
@@ -165,6 +178,13 @@ def predict(request, weather, progress=None):
     except PredictorError as exc:
         result["sounding"] = None
         result["warnings"].append("Sounding unavailable: " + str(exc))
+    from .provenance import snapshot, validate_manifest
+    import copy
+    result["weather"] = copy.deepcopy(weather.info)
+    result["input_manifest"] = snapshot(weather.model)
+    validate_manifest(result)
+    if weather.bridge["sample_calls"]:
+        result["warnings"].append(f"Below-model approximation used: maximum depth {weather.bridge["maximum_depth_m"]:.1f} m. See weather.below_model for the method and time range.")
     return result
 
 

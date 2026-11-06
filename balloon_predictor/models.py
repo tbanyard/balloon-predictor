@@ -20,8 +20,12 @@ class PredictionRequest(StrictModel):
     burst_altitude: float = Field(default=25000, gt=0, le=55000)
     descent_rate: float = Field(default=5, gt=0, le=50)
     descent_model: Literal["density", "constant"] = "density"
-    landing_mode: Literal["terrain", "fixed"] = "terrain"
+    landing_mode: Literal["terrain", "fixed", "dem"] = "terrain"
     landing_altitude: float = Field(default=0, ge=-500, le=10000)
+    ground_source: Literal["manual", "model", "dem"] = "manual"
+    ground_altitude: float | None = Field(default=None, ge=-500, le=10000)
+    dem_id: str = Field(default="auto", max_length=180)
+    below_model_policy: Literal["bridge", "strict"] = "bridge"
     use_vertical_wind: bool = False
     time_step: float = Field(default=10, ge=1, le=60)
     max_duration_hours: float = Field(default=12, gt=0, le=48)
@@ -126,3 +130,23 @@ class DownloadRequest(StrictModel):
         if self.source in ("ifs", "gfs") and self.grid != .25:
             raise ValueError("Operational IFS/GFS downloads use the 0.25-degree product.")
         return self
+
+
+class ModelBoxRequest(StrictModel):
+    selection: Literal["flight", "plan"] = "flight"
+    flight_index: int = Field(default=0, ge=0)
+    scope: Literal["ascent", "full"] = "full"
+    include_ensemble: bool = True
+    margin_degrees: float = Field(default=.5, ge=.5, le=5)
+    margin_km: float = Field(default=50, ge=50, le=500)
+
+
+class CleanupRequest(StrictModel):
+    target: Literal["dataset", "cache", "results"]
+    name: str | None = None
+    allow_orphan: bool = False
+
+
+class TerrainDownloadRequest(StrictModel):
+    latitude: float = Field(ge=-85, le=85)
+    longitude: float = Field(ge=-180, le=360)

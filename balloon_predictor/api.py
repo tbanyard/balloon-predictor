@@ -14,7 +14,10 @@ from starlette.background import BackgroundTask
 from . import __version__
 from .errors import PredictorError
 from .exports import arrival_csv_export, csv_export, geojson, kml_export
-from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest
+from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest
+from .storage import activity, inventory, cleanup, StorageLeaseMiddleware
+from .context import flight_weather
+from .provenance import validate_manifest
 from .coordination import plan_arrivals
 from .predictor import predict, predict_batch
 from .settings import ROOT, Settings
@@ -40,6 +43,8 @@ class Jobs:
                 if completed is None:
                     break
                 del self.records[completed]
+            lease = activity(self.settings)
+            lease.__enter__()
             job_id = uuid.uuid4().hex
             self.records[job_id] = {"id": job_id, "kind": kind, "status": "queued", "message": "Queued"}
         def update(message):
@@ -53,6 +58,8 @@ class Jobs:
                 if kind == "prediction":
                     result["id"] = job_id
                     atomic_json(self.settings.data_dir / "results" / (job_id + ".json"), result)
+                if kind == "export":
+                    atomic_json(self.settings.data_dir / "exports" / (job_id + ".json"), result)
                 with self.lock:
                     self.records[job_id].update(status="completed", message="Complete", result=result)
             except PredictorError as exc:
@@ -66,7 +73,12 @@ class Jobs:
                 with self.lock:
                     self.records[job_id].update(status="failed", message="Unexpected processing error. Check input files and the server log.",
                                                 error="Unexpected processing error. Check input files and the server log.")
-        self.executor.submit(run)
+        try:
+            future = self.executor.submit(run)
+            future.add_done_callback(lambda _: lease.__exit__(None, None, None))
+        except Exception:
+            lease.__exit__(None, None, None)
+            raise
         return {"id": job_id, "status": "queued"}
 
     def get(self, job_id):
@@ -78,6 +90,10 @@ class Jobs:
             if path.exists():
                 return {"id": job_id, "kind": "prediction", "status": "completed",
                         "message": "Complete", "result": json.loads(path.read_text(encoding="utf-8"))}
+            path = self.settings.data_dir / "exports" / (job_id + ".json")
+            if path.exists():
+                return {"id": job_id, "kind": "export", "status": "completed", "message": "Complete",
+                        "result": json.loads(path.read_text(encoding="utf-8"))}
         raise HTTPException(404, "Job not found.")
 
 
@@ -93,6 +109,7 @@ def create_app(settings=None):
 
     app = FastAPI(title="Balloon Predictor", version=__version__, lifespan=lifespan)
     app.state.store, app.state.jobs = store, jobs
+    app.add_middleware(StorageLeaseMiddleware, settings=settings)
 
     @app.exception_handler(PredictorError)
     async def known_error(request: Request, exc: PredictorError):
@@ -105,7 +122,7 @@ def create_app(settings=None):
     @app.get("/api/weather")
     def weather_list():
         return {"datasets": store.list(), "defaults":{"dataset":"era5", "era5_root":str(settings.era5_root),
-                    "wrf_root":str(settings.wrf_root),"cache_mb":settings.cache_mb},
+                    "wrf_root":str(settings.wrf_root),"cache_mb":settings.cache_mb, "data_dir":str(settings.data_dir), "terrain_dir":str(store.terrain.root)},
                 "messages":store.native.messages}
 
     @app.post("/api/weather/rescan", status_code=202)
@@ -198,8 +215,9 @@ def create_app(settings=None):
     def sonde_export(job_id: str, flight_index: int = Query(default=0, ge=0), scope: str = "ascent"):
         from .sonde import write_sonde
         result = selected_result(job_id, flight_index)
+        validate_manifest(result)
         body = PredictionRequest.model_validate(result["request"])
-        weather = store.get(body.dataset, body.launch_datetime)
+        weather = flight_weather(store.get(body.dataset, body.launch_datetime), body)
         path = settings.data_dir / "results" / (uuid.uuid4().hex + ".sonde.nc")
         try:
             write_sonde(path, result, weather, scope)
@@ -223,7 +241,8 @@ def create_app(settings=None):
         from .profiles import observation
         from .models import PredictionRequest
         request=PredictionRequest.model_validate(result["request"])
-        weather=store.get(request.dataset,request.launch_datetime)
+        validate_manifest(result)
+        weather=flight_weather(store.get(request.dataset,request.launch_datetime), request)
         launch=result["summary"]["launch"]
         rows=[observation(weather,{**launch,"altitude":r["altitude"]}) for r in profile["rows"]]
         return {**profile,"mode":"launch","rows":rows,
@@ -252,6 +271,53 @@ def create_app(settings=None):
             finally:
                 ds.close()
         return jobs.submit("weather", task)
+
+    @app.get("/api/storage")
+    def storage_info():
+        return inventory(settings, store)
+
+    @app.post("/api/storage/cleanup")
+    def storage_cleanup(body: CleanupRequest):
+        with jobs.lock:
+            if any(r["status"] in ("queued", "running") for r in jobs.records.values()):
+                raise HTTPException(409, "Wait for queued/running predictions, downloads and exports before cleanup.")
+            result = cleanup(settings, store, body)
+            if body.target == "results":
+                jobs.records = {k:v for k,v in jobs.records.items() if v["kind"] not in ("prediction", "export")}
+        return result
+
+    @app.get("/api/terrain")
+    def physical_terrain():
+        return {"path": str(store.terrain.root), "tiles": store.terrain.list(),
+                "note": "GeoTIFF elevations must be orthometric metres. GLO-30 is an EGM2008 DSM, including vegetation/buildings. Use a local bare-earth DTM where available."}
+
+    @app.get("/api/terrain/sample")
+    def sample_physical_terrain(latitude: float = Query(ge=-85,le=85), longitude: float = Query(ge=-180,le=360), tile: str = "auto"):
+        height, used = store.terrain.sample(latitude,longitude,tile)
+        return {"altitude": height, "tile": used, "reference": "orthometric metres (tile datum)"}
+
+    @app.post("/api/terrain/download", status_code=202)
+    def download_terrain(body: TerrainDownloadRequest):
+        return jobs.submit("terrain", lambda progress: store.terrain.download(body.latitude,body.longitude,progress))
+
+    @app.post("/api/predictions/{job_id}/model-box", status_code=202)
+    def model_box(job_id: str, body: ModelBoxRequest):
+        from .modelbox import export_model_boxes
+        record = jobs.get(job_id)
+        if record["status"] != "completed" or record["kind"] != "prediction":
+            raise HTTPException(409, "Prediction is not complete.")
+        return jobs.submit("export", lambda progress: export_model_boxes(record["result"],body,store,progress))
+
+    @app.get("/api/exports/{job_id}/download")
+    def model_box_download(job_id: str):
+        record = jobs.get(job_id)
+        if record["status"] != "completed" or record["kind"] != "export":
+            raise HTTPException(409, "Export is not complete.")
+        result = record["result"]
+        path = Path(result["path"])
+        if not path.is_file() or not path.resolve().is_relative_to((settings.data_dir / "exports").resolve()):
+            raise HTTPException(404, "Export was cleared. Create it again from the prediction.")
+        return FileResponse(path, filename=result["filename"], media_type="application/zip" if path.suffix==".zip" else "application/x-netcdf")
 
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str):

@@ -1,5 +1,27 @@
 # Changelog
 
+## v1.3.0 — 2026-11-05
+
+- Separate physical launch ground, DEM landing and model orography; preserve
+  actual launch altitude. Add labelled hydrostatic/lapse near-surface bridge
+  and strict mode, with approximation metadata in predictions and sonde files.
+- Read regional GeoTIFF DEM/DTM tiles; download public GLO-30 launch tiles.
+- Export native-grid model boxes for one flight or complete plans, including
+  sensitivity tracks, native time brackets, all available levels, source receipts,
+  latitude-aware margins, explicit clipping, background progress and mixed-source ZIPs.
+- Fix operational forecasts inheriting the ERA5-only grid choice and invalid
+  second-bearing suggested download times. Display real server-side save paths.
+- Add separate dataset/cache/result cleanup with dependency counts and shared
+  leases protecting active jobs/streams across v1.3 processes.
+- Add panel maximise/restore, eight resize handles, docked split divider and
+  toolbar minimise/restore toggles. Put the sidebar toggle in the header; use
+  a real mobile drawer and one main panel at a time.
+- Keep launch setups and reset old window geometry; retain port 8001.
+- Verification: 82 backend tests and expanded frontend DOM workflow checks pass;
+  real GLO-30 download and real cached IFS/GFS sonde/model-box workflows pass.
+  Rendered desktop/Android appearance remains unverified in this build runtime.
+
+
 ## 1.2.0
 
 - Fixed number-field step bases: whole and fractional ascent/descent rates,

@@ -53,6 +53,9 @@ def sampled_track(result, scope="ascent"):
 
 
 def write_sonde(path, result, weather, scope="ascent"):
+    from .context import flight_weather
+    from .models import PredictionRequest
+    weather = flight_weather(weather, PredictionRequest.model_validate(result["request"]))
     schema = json.loads(SCHEMA_PATH.read_text(encoding="utf-8"))
     seconds, lat, lon, alt = sampled_track(result, scope)
     start = datetime.fromisoformat(result["summary"]["launch"]["datetime"].replace("Z", "+00:00"))
@@ -93,7 +96,8 @@ def write_sonde(path, result, weather, scope="ascent"):
     date = start.strftime("%Y-%m-%d")
     source = result["weather"].get("label", result["request"]["dataset"])
     launch = result["summary"]["launch"]
-    ground = weather.terrain(launch["latitude"], launch["longitude"]) if weather.info.get("terrain_available") else launch["altitude"]
+    ground = weather.launch_ground()
+    ground = float("nan") if ground is None else ground
     values = {key: "" for key in schema["global_attributes"]}
     values.update(Conventions="CF-1.13", title="Model-derived simulated radiosonde trajectory",
         project="BalloonPredictor model simulation", source="SIMULATION: " + source,
@@ -121,6 +125,9 @@ def write_sonde(path, result, weather, scope="ascent"):
                 value = str(value)
             ds.setncattr(name, value)
         ds.setncatts({"simulation": "true", "model_provenance": json.dumps(provenance, sort_keys=True),
+            "below_model_approximation_json": json.dumps(result["weather"].get("below_model", {})),
+            "physical_ground_json": json.dumps(result["weather"].get("physical_ground", {})),
+            "sonde_resampling_below_model_json": json.dumps(weather.bridge),
             "trajectory_scope": scope, "sampling_interval_seconds": 1.,
             "sampling_note": "Regular 1 Hz samples through the last complete second. A fractional terminal second is omitted; the exact integrated endpoint is recorded in exact_endpoint_json.",
             "exact_endpoint_json": json.dumps(result["summary"]["burst"] if scope == "ascent" else result["summary"]["endpoint"]),

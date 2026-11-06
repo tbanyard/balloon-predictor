@@ -7,7 +7,7 @@ cd -- "$predictor_project"
 # Reuse an explicitly activated environment without changing it silently.
 if [[ -n "${CONDA_PREFIX:-}" || -n "${VIRTUAL_ENV:-}" ]]; then
   predictor_python="$(command -v python)"
-  if ! "$predictor_python" -c 'import sys; assert sys.version_info >= (3,12); import numpy, scipy, xarray, netCDF4, fastapi, uvicorn, pydantic, yaml, dotenv, filelock' >/dev/null 2>&1; then
+  if ! "$predictor_python" -c 'import sys; assert sys.version_info >= (3,12); import numpy, scipy, xarray, netCDF4, fastapi, uvicorn, pydantic, yaml, dotenv, filelock, rasterio' >/dev/null 2>&1; then
     echo 'The active environment needs Python 3.12+ and the predictor dependencies.' >&2
     printf 'Run: python -m pip install -r %q\n' "$predictor_project/requirements.txt" >&2
     exit 1
@@ -25,9 +25,9 @@ else
     "$predictor_python" -m venv --copies "$predictor_venv"
   fi
   predictor_python="$predictor_venv/bin/python"
-  if [[ ! -f "$predictor_venv/.balloon-predictor-1.2-ready" ]]; then
+  if [[ ! -f "$predictor_venv/.balloon-predictor-1.3-ready" ]]; then
     "$predictor_python" -m pip install -r "$predictor_project/requirements.lock.txt"
-    touch "$predictor_venv/.balloon-predictor-1.2-ready"
+    touch "$predictor_venv/.balloon-predictor-1.3-ready"
   fi
 fi
 # Keep generated data per-user for a shared or read-only installation.
@@ -39,5 +39,5 @@ done
 if [[ "$predictor_personal_config" == false ]]; then
   export BP_DATA_DIR="${BP_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/balloon-predictor}"
 fi
-echo 'BalloonPredictor v1.2 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
+echo 'BalloonPredictor v1.3 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
 exec "$predictor_python" "$predictor_project/server.py" "$@"

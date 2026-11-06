@@ -39,6 +39,8 @@ class WeatherStore:
         self.cache = OrderedDict()
         self.lock = threading.RLock()
         self.native = NativeCatalog(settings)
+        from .terrain import TerrainCatalog
+        self.terrain = TerrainCatalog(settings.terrain_dir or settings.data_dir / "terrain")
 
     def list(self):
         result = [DemoWeather.info, *self.native.list()]
@@ -81,9 +83,13 @@ class WeatherStore:
 
     def get(self, name, when=None):
         if name == "demo":
-            return DemoWeather()
+            weather = DemoWeather()
+            weather.terrain_catalog = self.terrain
+            return weather
         if name in ("era5", "wrf") or any(info["id"] == name for info in self.native.wrf):
-            return self.native.get(name, when)
+            weather = self.native.get(name, when)
+            weather.terrain_catalog = self.terrain
+            return weather
         checked_name(name)
         path = self.settings.data_dir / "weather" / (name + ".nc")
         if not path.exists():
@@ -96,8 +102,17 @@ class WeatherStore:
             with xr.open_dataset(path, engine="netcdf4") as ds:
                 if ds.nbytes / 1024**2 > self.settings.max_weather_mb:
                     raise PredictorError("Weather dataset exceeds max_weather_mb. Crop it or increase the setting.")
+                from .provenance import record_file
+                from .errors import CoverageError
+                before = path.stat()
                 ds.load()
+                after = path.stat()
+                if (before.st_mtime_ns,before.st_size)!=(after.st_mtime_ns,after.st_size):
+                    raise CoverageError("Weather file changed during loading. Retry after the writer finishes.")
                 weather = DatasetWeather(ds, describe_dataset(ds, name))
+                weather.source_path = path
+                record_file(weather, path)
+                weather.terrain_catalog = self.terrain
             # Keep one materialized weather dataset; in-flight references remain valid.
             self.cache.clear()
             self.cache[key] = weather

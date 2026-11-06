@@ -110,3 +110,31 @@ metadata rather than rounded into the integer-second time coordinate. See
 - [ECMWF L137 coefficients](https://confluence.ecmwf.int/display/UDOC/L137+model+level+definitions)
 - [NCAR WRF output variables](https://www2.mmm.ucar.edu/wrf/site/users_guide/output_variables.html)
 - [MetPy moist-lapse differential equation](https://unidata.github.io/MetPy/latest/api/generated/metpy.calc.moist_lapse.html)
+
+## Physical ground and below-model air (v1.3)
+
+Physical DEM / known launch ground is independent of forecast terrain. It is
+never subtracted from model levels or used to shift the launch. DEM landing
+samples orthometric metres in a separate regional raster. Horizontal CRS
+conversion does not convert vertical datums or GPS ellipsoid heights.
+
+Below a contributing column's lowest valid air anchor, bridge mode holds wind,
+vertical wind and specific humidity at that anchor. With depth `d = z0 - z > 0`,
+`T = T0 + L d` and `p = p0 (T / T0) ** (g / (Rd L))`, using `L = 0.0065 K/m`,
+`g = 9.80665 m/s²`, and `Rd = 287.05 J/(kg K)`. This is a lower-atmosphere
+approximation, capped at 3 km and identified in result/sonde metadata. Each
+native column is processed before space/time blending. Strict mode refuses
+unresolved air. Hydrostatic pressure and density now vary with the true launch
+height instead of being silently clamped to a coarser model ground.
+
+A wind/surface anchor may combine 10 m wind, 2 m temperature/humidity and surface
+pressure as in the existing reader; it is not a fully resolved ten-metre
+thermodynamic observation. Holding q does not model changing saturation or
+condensation. A higher-resolution DEM improves ground identification, not the
+underlying forecast wind resolution. A better-resolved weather model is needed
+for terrain-channelled coastal/valley winds.
+
+Model-box exports retain model terrain and the available native levels/time
+brackets. They export the derived fields used by the trajectory adapters, not
+simulated observation fields or vertically shifted air. See docs/V1.3.md for
+provenance, clipping and the exact export scope.

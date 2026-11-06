@@ -44,3 +44,10 @@ tzdata==2026.5
 urllib3==2.8.0
 uvicorn==0.54.0
 xarray==2026.9.0
+
+# Physical regional DEM/DTM tiles (GDAL binaries are bundled in rasterio wheels).
+rasterio==1.5.2
+affine==3.0.1
+cligj==0.7.2
+click-plugins==1.1.1.2
+pyparsing==3.3.3

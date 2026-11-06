@@ -2,6 +2,10 @@
 data_dir: data
 workers: 2
 max_weather_mb: 2048
+# Estimated uncompressed bytes limit per model-box export.
+max_export_mb: 4096
+# Optional existing regional GeoTIFF directory; default is <data_dir>/terrain.
+# terrain_dir: /data1/tim/terrain
 
 # Read the same model-level files as the companion ERA5 viewer.
 era5_root: /data3/ERA5

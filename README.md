@@ -1,16 +1,17 @@
-# BalloonPredictor v1.2
+# BalloonPredictor v1.3
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
 Runs on your computer at **http://localhost:8001**.
 
-Start with [QUICKSTART.md](QUICKSTART.md). Version 1.2 adds operational ECMWF
-and GFS downloads with humidity, coordinated arrivals, sonde NetCDF export,
-independent movable/resizable/lockable panels, orange scrollbars, a tab icon and
-collapsible flight controls. ERA5 archives, large native WRF files, multiple
-launch points, repeated launches and existing exports remain available.
+Start with [QUICKSTART.md](QUICKSTART.md). Version 1.3 separates real ground from
+model orography, adds regional GeoTIFF terrain and native model-box NetCDF export,
+shows weather storage and cleanup controls, and improves desktop windows and the
+mobile sidebar drawer. Operational IFS/GFS downloads, coordinated arrivals,
+sonde files, ERA5 archives, large native WRF files and existing exports remain.
 
-See [docs/V1.2.md](docs/V1.2.md) for the new workflows and NetCDF contract.
+See [docs/V1.3.md](docs/V1.3.md) for setup, terrain policies, export details and
+verification limits. The original sonde contract is in [docs/V1.2.md](docs/V1.2.md).
 
 See [CHANGELOG.md](CHANGELOG.md) and [docs/GIT.md](docs/GIT.md) for the release
 changes and a ready-to-follow GitHub upload guide.
@@ -32,7 +33,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-v1.2 directory. Initial installation needs internet
+the extracted balloon-predictor-v1.3 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 Generated data is per-user under `~/.local/share/balloon-predictor` unless
@@ -322,8 +323,10 @@ expver dimensions are supported.
 - Sub-ground pressure levels are discarded. Surface winds are blended with the
   lowest valid levels where available; below the lowest represented wind the
   nearest wind is held constant.
-- Terrain landing uses the imported model terrain, which may differ from actual
-  local ground. Fixed landing uses your specified AMSL altitude.
+- Launch ground can use known site elevation, a separate physical DEM, or model
+  terrain. Landing independently uses model terrain, physical DEM or fixed AMSL
+  altitude. The default labelled bridge handles unresolved near-surface air;
+  strict mode rejects it. See docs/V1.3.md for the 3 km cap and approximation.
 - The integrator resolves burst and ground crossings inside the last time step.
   It refuses to continue outside the weather time window, horizontal domain or
   vertical top.

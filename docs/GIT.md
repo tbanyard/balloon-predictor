@@ -1,4 +1,4 @@
-# Put BalloonPredictor v1.2 on GitHub
+# Put BalloonPredictor v1.3 on GitHub
 
 Keep this as its own repository, beside the ERA5 viewer repository. They are
 separate applications with matching packaging and common weather inputs.
@@ -12,15 +12,15 @@ separate applications with matching packaging and common weather inputs.
 3. Run the commands below, replacing `YOUR_USERNAME` with your GitHub username.
 
 ```bash
-cd /data1/tim/balloon-predictor-v1.2
+cd /data1/tim/balloon-predictor-v1.3
 git init -b main
 git add .
 git status --short
-git commit -m "Release BalloonPredictor v1.2"
+git commit -m "Release BalloonPredictor v1.3"
 git remote add origin https://github.com/YOUR_USERNAME/balloon-predictor.git
 git push -u origin main
-git tag -a v1.2.0 -m "BalloonPredictor v1.2"
-git push origin v1.2.0
+git tag -a v1.3.0 -m "BalloonPredictor v1.3"
+git push origin v1.3.0
 ```
 
 GitHub may ask you to authenticate through your installed credential manager.
@@ -49,19 +49,19 @@ git status --short
 git diff
 # After checking the intended changes:
 git add .
-git commit -m "Upgrade BalloonPredictor to v1.2"
+git commit -m "Upgrade BalloonPredictor to v1.3"
 git push
-git tag -a v1.2.0 -m "BalloonPredictor v1.2"
-git push origin v1.2.0
+git tag -a v1.3.0 -m "BalloonPredictor v1.3"
+git push origin v1.3.0
 ```
 
-Do not replace an existing `v1.2.0` tag: use a new patch version for subsequent
+Do not replace an existing `v1.3.0` tag: use a new patch version for subsequent
 changes. If this is a shared repository, use a branch and a pull request.
 
 ## Optional GitHub Release
 
 In your repository, choose **Releases → Draft a new release**, select tag
-`v1.2.0`, title it **BalloonPredictor v1.2**, and paste the relevant section of
+`v1.3.0`, title it **BalloonPredictor v1.3**, and paste the relevant section of
 `CHANGELOG.md`. Attach the provided release ZIP if you want a ready-to-extract
 download alongside GitHub's source archives.
 
