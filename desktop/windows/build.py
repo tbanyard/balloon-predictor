@@ -17,7 +17,15 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[1]
 PYTHON_VERSION = "3.13.16"
 PYTHON_SHA256 = "97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297"
-WEBVIEW_URL = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+# Exact Microsoft Evergreen bootstrapper, checked against Microsoft's signing
+# chain and timestamp. The fwlink is for discovering updates; its payload changes.
+# To update this pin, verify the new Authenticode signature and record the resolved
+# Microsoft CDN URL and whole-file SHA-256 together.
+WEBVIEW_URL = (
+    "https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/"
+    "068be74d-a831-494f-8f57-c173756d5a33/MicrosoftEdgeWebview2Setup.exe"
+)
+WEBVIEW_SHA256 = "cf2f2445fef0c5c14e372045f84998771eeb8bb01d59be4afd00692fa160082e"
 VERSION = tomllib.loads((REPO / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
@@ -33,6 +41,17 @@ def download(url, path):
 def sha256(path):
     with path.open("rb") as file:
         return hashlib.file_digest(file, "sha256").hexdigest()
+
+
+def fetch_webview_bootstrapper(path):
+    download(WEBVIEW_URL, path)
+    digest = sha256(path)
+    if digest != WEBVIEW_SHA256:
+        path.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Microsoft WebView2 bootstrapper SHA-256 mismatch: expected {WEBVIEW_SHA256}, got {digest}."
+        )
+    print(f"Verified Microsoft WebView2 bootstrapper SHA-256: {digest}", flush=True)
 
 
 def copy_msvc_runtime(runtime):
@@ -93,6 +112,7 @@ def stage(payload, work, source_commit):
         "source_commit": source_commit,
         "python": PYTHON_VERSION,
         "python_sha256": PYTHON_SHA256,
+        "webview2_bootstrapper_sha256": WEBVIEW_SHA256,
         "windows_requirements_sha256": sha256(lock),
         "msvc_runtime": msvc,
         "architecture": "x64",
@@ -114,18 +134,10 @@ def build(output):
     output.mkdir(parents=True, exist_ok=True)
     with TemporaryDirectory(prefix="BalloonPredictor Build ") as temp:
         work = Path(temp)
+        bootstrapper = work / "MicrosoftEdgeWebview2Setup.exe"
+        fetch_webview_bootstrapper(bootstrapper)
         payload = work / "payload"
         stage(payload, work, source_commit)
-        bootstrapper = work / "MicrosoftEdgeWebview2Setup.exe"
-        download(WEBVIEW_URL, bootstrapper)
-        run(
-            "powershell.exe", "-NoProfile", "-NonInteractive", "-Command",
-            "$s = Get-AuthenticodeSignature -LiteralPath $env:BP_WEBVIEW_SETUP; "
-            "if ($s.Status -ne 'Valid' -or $s.SignerCertificate.GetNameInfo("
-            "[System.Security.Cryptography.X509Certificates.X509NameType]::SimpleName, $false)"
-            " -ne 'Microsoft Corporation') { throw 'Invalid Microsoft WebView2 bootstrapper signature' }",
-            env={**os.environ, "BP_WEBVIEW_SETUP": str(bootstrapper)},
-        )
         run(
             str(iscc), f"/DAppVersion={VERSION}", f"/DPayload={payload}",
             f"/DBootstrapper={bootstrapper}", f"/O{output}", "/Qp",
