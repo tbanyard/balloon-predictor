@@ -24,7 +24,7 @@
     <aside class="sidebar" id="flight-sidebar">
       <div class="sidebar-heading-row"><span class="eyebrow">FLIGHT SETUP</span><button id="sidebar-toggle" type="button" class="sidebar-toggle" aria-label="Hide flight controls" aria-expanded="true" aria-controls="flight-sidebar">‹ Controls</button></div><div class="sidebar-heading"><h1>Follow the wind.</h1><p>Choose your atmosphere. Trace your flight.</p></div>
       <form id="flight-form">
-        <div class="field weather-field"><label for="dataset">Weather dataset</label><select id="dataset" name="dataset"><option value="era5">ERA5 · local model-level archive</option></select><div id="coverage" class="field-note">Looking for your local ERA5 archive…</div></div>
+        <div class="field weather-field"><label for="dataset">Weather dataset</label><select id="dataset" name="dataset"><option value="">Loading weather datasets…</option></select><div id="coverage" class="field-note">Looking for available weather datasets…</div></div>
         <div class="launch-controls"><label for="flight_name">Launch point name</label><input id="flight_name" maxlength="60" value="Launch 1"><div class="launch-actions"><button type="button" class="text-button" id="add-flight">+ Add launch point</button><button type="button" class="text-button" id="duplicate-flight">Duplicate</button><button type="button" class="text-button" id="remove-flight">Remove</button></div></div>
         <div class="section-heading"><h2>Launch</h2><button type="button" id="map-hint" class="text-button">Click map to place ↗</button></div>
         <div class="field"><label for="launch_datetime">Launch date &amp; time <span>UTC</span></label><input id="launch_datetime" name="launch_datetime" type="datetime-local" step="1" required></div>

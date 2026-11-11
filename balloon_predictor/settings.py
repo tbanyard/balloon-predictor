@@ -21,6 +21,7 @@ class Settings:
 
     terrain_dir: Path | None = None
     max_export_mb: int = 4096
+    default_dataset: str = "era5"
 
     @classmethod
     def load(cls, path=None):
@@ -43,7 +44,8 @@ class Settings:
                    max(16, int(os.environ.get("BP_CACHE_MB",config.get("cache_mb", 256)))),
                    max(0.1, float(config.get("max_time_gap_hours", 6))),
                    root("terrain_dir", "BP_TERRAIN_DIR", str(data_dir / "terrain")),
-                   int(config.get("max_export_mb", 4096)))
+                   int(config.get("max_export_mb", 4096)),
+                   str(config.get("default_dataset", "era5")))
 
     def prepare(self):
         for name in ("raw", "cache", "weather", "results", "exports", "locks", "terrain"):

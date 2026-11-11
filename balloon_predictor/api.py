@@ -121,7 +121,7 @@ def create_app(settings=None):
 
     @app.get("/api/weather")
     def weather_list():
-        return {"datasets": store.list(), "defaults":{"dataset":"era5", "era5_root":str(settings.era5_root),
+        return {"datasets": store.list(), "defaults":{"dataset":settings.default_dataset, "era5_root":str(settings.era5_root),
                     "wrf_root":str(settings.wrf_root),"cache_mb":settings.cache_mb, "data_dir":str(settings.data_dir), "terrain_dir":str(store.terrain.root)},
                 "messages":store.native.messages}
 

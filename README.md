@@ -49,6 +49,10 @@ chmod +x start.sh
 
 **Windows PowerShell**
 
+For the standalone x64 desktop installer and its test build, see
+[BalloonPredictor for Windows](desktop/windows/WINDOWS.md).
+To run the server from source, use PowerShell:
+
 ~~~powershell
 .\start.ps1
 ~~~

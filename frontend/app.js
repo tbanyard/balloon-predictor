@@ -93,7 +93,8 @@ function coverageText(info){
 async function loadDatasets(selectId){
   const response=await api("/api/weather");datasets=response.datasets;
   $("archive-paths").textContent="ERA5: "+response.defaults.era5_root+" · WRF: "+response.defaults.wrf_root+" · column cache: "+response.defaults.cache_mb+" MB. Edit config.yml to change these paths.";
-  const selected=selectId||$("dataset").value||"era5";$("dataset").replaceChildren();$("dataset-list").replaceChildren();
+  const defaultId=datasets.some(d=>d.id===response.defaults.dataset)?response.defaults.dataset:"demo";
+  const selected=selectId||$("dataset").value||defaultId;$("dataset").replaceChildren();$("dataset-list").replaceChildren();
   for(const info of [...datasets.filter(i=>i.id==="era5"),...datasets.filter(i=>i.id!=="era5"&&i.id!=="demo"),...datasets.filter(i=>i.id==="demo")]){
     const option=document.createElement("option");option.value=info.id;option.textContent=info.label;$("dataset").append(option);
     const card=document.createElement("div");card.className="dataset-card";
@@ -103,7 +104,7 @@ async function loadDatasets(selectId){
     card.append(tag,text,use);$("dataset-list").append(card);
   }
   for(const [value,label] of [["online-ifs","Online · ECMWF operational IFS…"],["online-gfs","Online · NOAA GFS…"]]){const option=document.createElement("option");option.value=value;option.textContent=label;$("dataset").append(option);}
-  $("dataset").value=datasets.some(d=>d.id===selected)||selected.startsWith("online-")?selected:"era5";datasetChanged(false);
+  $("dataset").value=datasets.some(d=>d.id===selected)||["online-ifs","online-gfs"].includes(selected)?selected:defaultId;datasetChanged(false);
 }
 function datasetChanged(adjustDate){
   const online=$("dataset").value.startsWith("online-");$("ground-button").disabled=online;
@@ -343,9 +344,8 @@ async function initialize(){
   try{
     const params=new URLSearchParams(location.search);let saved=null;try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY));}catch{}
     if(saved?.sites?.length&&saved.sites.length<=20){const defaults=readSetup();sites=saved.sites.map(s=>({...newSite({...defaults,...s.setup}),id:typeof s.id==="string"?s.id:newSite(defaults).id}));activeId=sites.some(s=>s.id===saved.activeId)?saved.activeId:sites[0].id;writeSetup(activeSite().setup);}
-    await loadDatasets(params.get("dataset")||$("dataset").value||"era5");
-    for(const[key,value]of params)if(setupFields.includes(key)){const field=$(key);if(key==="launch_datetime")field.value=utcInput(value);else if(field.type==="checkbox")field.checked=value==="true";else field.value=value;}
-    if(!$("dataset").value)$("dataset").value="era5";
+    await loadDatasets(params.get("dataset")||activeSite()?.setup.dataset);
+    for(const[key,value]of params)if(key!=="dataset"&&setupFields.includes(key)){const field=$(key);if(key==="launch_datetime")field.value=utcInput(value);else if(field.type==="checkbox")field.checked=value==="true";else field.value=value;}
     if(!sites.length){const site=newSite(readSetup());sites=[site];activeId=site.id;}else activeSite().setup=readSetup();
     updateFields();$("descent_model").onchange();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();
   }catch(e){status("flight-status","Could not connect to the local API: "+e.message,"error");}finally{$("predict-button").disabled=!sites.length||$("dataset").value.startsWith("online-");}
