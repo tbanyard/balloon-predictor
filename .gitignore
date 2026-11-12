@@ -23,3 +23,9 @@ data/exports/*
 data/locks/*
 data/terrain/*
 !data/**/.gitkeep
+
+# Local diagnostics and signing material.
+data/logs/*
+*.p12
+*.jks
+*.keystore

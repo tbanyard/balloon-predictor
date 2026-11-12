@@ -52,6 +52,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     window.matchMedia=()=>({matches:false});
     window.eval(fs.readFileSync("frontend/ui.js", "utf8"));
     window.eval(fs.readFileSync("frontend/windows.js", "utf8"));
+    window.eval(fs.readFileSync("frontend/sensitivity.js", "utf8"));
     window.eval(fs.readFileSync("frontend/app.js", "utf8"));
     await delay(200);
     const element = id => window.document.getElementById(id);

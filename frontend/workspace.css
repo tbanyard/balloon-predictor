@@ -45,7 +45,7 @@
 .window-arrange-menu{position:absolute;z-index:250;right:12px;top:48px;max-width:calc(100% - 24px);max-height:calc(100% - 60px);overflow:auto;background:#fff;border:1px solid #dce2d9;border-radius:8px;box-shadow:0 8px 28px #21352935;padding:6px;min-width:178px}
 .window-arrange-menu button{display:block;width:100%;border:0;background:transparent;text-align:left;color:var(--ink);padding:8px 10px;border-radius:4px;font-size:12px}.window-arrange-menu button:hover,.window-arrange-menu button:focus{background:#fff1e5;color:#a64720;outline:none}
 .window-snap-preview{position:absolute;z-index:5000;pointer-events:none;border:2px solid #d75b2c99;background:#f9a77738;border-radius:10px;box-shadow:inset 0 0 0 3px #fff8;display:flex;align-items:center;justify-content:center;color:#9d461e;font-size:15px;font-weight:600;text-shadow:0 1px 3px #fff;backdrop-filter:blur(1px)}
-.dock-divider{position:absolute;left:8px;right:8px;height:8px;cursor:row-resize;z-index:100;touch-action:none;border-radius:4px;background:#d6ddd2}.dock-divider:after{content:"";position:absolute;left:45%;right:45%;top:3px;height:2px;background:#a3b19f}.dock-divider:hover,.dock-divider:focus{background:#edc19b;outline:none}.dock-divider[aria-disabled=true]{cursor:not-allowed;opacity:.6}
+.dock-divider{position:absolute;left:8px;right:8px;height:8px;cursor:row-resize;z-index:5;touch-action:none;border-radius:4px;background:#d6ddd2}.dock-divider:after{content:"";position:absolute;left:45%;right:45%;top:3px;height:2px;background:#a3b19f}.dock-divider:hover,.dock-divider:focus{background:#edc19b;outline:none}.dock-divider[aria-disabled=true]{cursor:not-allowed;opacity:.6}
 /* Disclosure controls deliberately use + and −, never a rotated close symbol. */
 details>summary{list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px}details>summary::-webkit-details-marker{display:none}
 .disclosure-indicator,.advanced[open] summary .disclosure-indicator{transform:none!important;font-size:16px;line-height:1;min-width:18px;text-align:center;color:var(--muted);flex-shrink:0}
@@ -99,3 +99,5 @@ details>summary{list-style:none;display:flex;align-items:center;justify-content:
 }
 @media(max-width:420px){.brand svg{display:none}.brand>span{font-size:15px}.topbar{gap:6px;padding:8px 10px}}
 @media(prefers-reduced-motion:reduce){.workspace,.sidebar{transition:none}.loader-balloon,.loader-tether,.loader-cloud{animation:none}}
+
+.storage-location-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.storage-location-row input{min-width:min(100%,240px);flex:1}.map-legend .member-region{width:17px;height:10px;border-radius:6px;background:#588e7880;display:inline-block}

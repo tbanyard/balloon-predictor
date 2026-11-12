@@ -2,6 +2,9 @@ from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import json
 import logging
+from logging.handlers import RotatingFileHandler
+import os
+import traceback
 from pathlib import Path
 import threading
 import uuid
@@ -9,6 +12,7 @@ import uuid
 from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from . import __version__
@@ -20,11 +24,15 @@ from .context import flight_weather
 from .provenance import validate_manifest
 from .coordination import plan_arrivals
 from .predictor import predict, predict_batch
-from .settings import ROOT, Settings
+from .settings import ROOT, Settings, configured_data, save_data_location
 from .store import WeatherStore, atomic_json
 from .weather.download import download_weather
 
 LOGGER = logging.getLogger(__name__)
+
+
+class StorageLocation(BaseModel):
+    path: str = Field(min_length=1, max_length=4096)
 
 
 class Jobs:
@@ -49,7 +57,7 @@ class Jobs:
             self.records[job_id] = {"id": job_id, "kind": kind, "status": "queued", "message": "Queued"}
         def update(message):
             with self.lock:
-                self.records[job_id]["message"] = message
+                self.records[job_id].update(message=message, stage=message)
         def run():
             with self.lock:
                 self.records[job_id]["status"] = "running"
@@ -60,26 +68,47 @@ class Jobs:
                     atomic_json(self.settings.data_dir / "results" / (job_id + ".json"), result)
                 if kind == "export":
                     atomic_json(self.settings.data_dir / "exports" / (job_id + ".json"), result)
-                with self.lock:
-                    self.records[job_id].update(status="completed", message="Complete", result=result)
-            except PredictorError as exc:
-                with self.lock:
-                    self.records[job_id].update(status="failed", message=str(exc), error=str(exc))
-                # Do not log remote error bodies or credentials.
-                LOGGER.error("Job %s failed: %s (cause type: %s)", job_id, str(exc),
-                             type(exc.__cause__).__name__ if exc.__cause__ else "none")
+                outcome = dict(status="completed", message="Complete", result=result)
             except Exception as exc:
-                LOGGER.error("Job %s failed with exception type %s", job_id, type(exc).__name__)
-                with self.lock:
-                    self.records[job_id].update(status="failed", message="Unexpected processing error. Check input files and the server log.",
-                                                error="Unexpected processing error. Check input files and the server log.")
+                self.log_failure(job_id, kind, exc)
+                log = f"Server log: {self.settings.log_path} (job {job_id})."
+                message = str(exc) if isinstance(exc, PredictorError) else f"Unexpected processing error during {kind}. {log}"
+                if isinstance(exc, PredictorError) and "server log" in message:
+                    message += " " + log
+                outcome = dict(status="failed", message=message, error=message)
+            with self.lock:
+                # A terminal job may be cleaned up immediately.
+                lease.__exit__(None, None, None)
+                self.records[job_id].update(outcome)
         try:
             future = self.executor.submit(run)
-            future.add_done_callback(lambda _: lease.__exit__(None, None, None))
+            future.add_done_callback(lambda f: lease.__exit__(None, None, None) if f.cancelled() else None)
         except Exception:
             lease.__exit__(None, None, None)
             raise
         return {"id": job_id, "status": "queued"}
+
+    def log_failure(self, job_id, kind, error):
+        # Log stage, exception type and stack locations without response bodies,
+        # exception messages or frame locals (which may include credentials).
+        errors = [error] + ([error.__cause__] if error.__cause__ else [])
+        trace = " | ".join(f"{type(exc).__name__}: " + " → ".join(
+            f"{Path(frame.filename).name}:{frame.lineno} in {frame.name}"
+            for frame in traceback.extract_tb(exc.__traceback__)) for exc in errors)
+        with self.lock:
+            stage = self.records[job_id].get("stage", "starting")
+            line = f"Job {job_id} ({kind}, {stage}) failed: {trace}"
+            try:
+                handler = RotatingFileHandler(self.settings.log_path, maxBytes=2_000_000,
+                                              backupCount=2, encoding="utf-8")
+                handler.setFormatter(logging.Formatter("%(asctime)s %(levelname)s %(message)s"))
+                try:
+                    handler.handle(logging.LogRecord(__name__, logging.ERROR, "", 0, line, (), None))
+                finally:
+                    handler.close()
+            except OSError:
+                LOGGER.error("Could not write the job log at %s", self.settings.log_path)
+            LOGGER.error("%s", line)
 
     def get(self, job_id):
         with self.lock:
@@ -109,6 +138,7 @@ def create_app(settings=None):
 
     app = FastAPI(title="Balloon Predictor", version=__version__, lifespan=lifespan)
     app.state.store, app.state.jobs = store, jobs
+    app.state.edit_storage_location = False
     app.add_middleware(StorageLeaseMiddleware, settings=settings)
 
     @app.exception_handler(PredictorError)
@@ -121,7 +151,7 @@ def create_app(settings=None):
 
     @app.get("/api/weather")
     def weather_list():
-        return {"datasets": store.list(), "defaults":{"dataset":"era5", "era5_root":str(settings.era5_root),
+        return {"datasets": store.list(), "defaults":{"dataset":settings.default_dataset, "era5_root":str(settings.era5_root),
                     "wrf_root":str(settings.wrf_root),"cache_mb":settings.cache_mb, "data_dir":str(settings.data_dir), "terrain_dir":str(store.terrain.root)},
                 "messages":store.native.messages}
 
@@ -267,6 +297,7 @@ def create_app(settings=None):
         def task(progress):
             ds = download_weather(body, settings, progress)
             try:
+                progress("Saving the processed weather dataset")
                 return store.save(body.name, ds)
             finally:
                 ds.close()
@@ -274,7 +305,25 @@ def create_app(settings=None):
 
     @app.get("/api/storage")
     def storage_info():
-        return inventory(settings, store)
+        info = inventory(settings, store)
+        editable = app.state.edit_storage_location and bool(settings.config_path) and "BP_DATA_DIR" not in os.environ
+        pending = None
+        if editable:
+            selected = configured_data(settings.config_path).get("data_dir")
+            if selected:
+                saved = (settings.config_path.parent / Path(selected).expanduser()).resolve()
+                if saved != settings.data_dir:
+                    pending = str(saved)
+        return {**info, "config_path": str(settings.config_path or ""), "log_path": str(settings.log_path),
+                "editable": editable, "pending_data_dir": pending}
+
+    @app.post("/api/storage/location")
+    def storage_location(body: StorageLocation):
+        if not app.state.edit_storage_location or not settings.config_path or "BP_DATA_DIR" in os.environ:
+            raise HTTPException(403, "The server operator can change the location in config.yml or BP_DATA_DIR.")
+        with jobs.lock:
+            target = save_data_location(settings, body.path.strip())
+        return {"data_dir": str(target), "restart_required": target != settings.data_dir}
 
     @app.post("/api/storage/cleanup")
     def storage_cleanup(body: CleanupRequest):

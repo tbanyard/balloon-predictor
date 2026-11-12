@@ -101,7 +101,7 @@ The application does not automatically delete your source files.
 
 **Default ERA5 is selected but no files are available**
 
-Set `era5_root` to the same directory as ERA5 viewer (default `/data3/ERA5`).
+Set `era5_root` to the same directory as ERA5 viewer (detects `/data3/ERA5` if present).
 Use Manage weather → Rescan local data after adding files. The predictor never
 silently substitutes demo weather. Choose Demo explicitly for a trial without
 real weather, or use the retained download window.
@@ -114,7 +114,7 @@ A fixed landing altitude cannot replace the missing atmospheric height reference
 
 **WRF runs show the wrong dates, duplicate timestamps or no files**
 
-Check `wrf_root` (default `/data1/tim/SkySightWRF`), readable permissions and
+Check the configured `wrf_root`, readable permissions and
 standard `wrfout*` names. Keep each run/domain in a separate appropriate folder.
 Rescan after new files are added. The date list comes from actual file times.
 
@@ -137,3 +137,5 @@ Browser reload retains the saved setups, while result JSON persists on the
 server and can be exported before reload. Save launch setups to move them
 between browsers. Along-ascent soundings persist with the result; fixed-column
 recalculation still requires the original weather files.
+
+For unexpected processing errors, see the job ID and log path in the error or in **Manage Weather → Weather storage & cleanup**.

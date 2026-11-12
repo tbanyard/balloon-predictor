@@ -30,14 +30,5 @@ else
     touch "$predictor_venv/.balloon-predictor-1.4-ready"
   fi
 fi
-# Keep generated data per-user for a shared or read-only installation.
-predictor_personal_config=false
-[[ -n "${BP_CONFIG:-}" ]] && predictor_personal_config=true
-for predictor_argument in "$@"; do
-  [[ "$predictor_argument" == --config || "$predictor_argument" == --config=* ]] && predictor_personal_config=true
-done
-if [[ "$predictor_personal_config" == false ]]; then
-  export BP_DATA_DIR="${BP_DATA_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/balloon-predictor}"
-fi
-echo 'BalloonPredictor v1.4 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
+echo 'BalloonPredictor v1.5 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
 exec "$predictor_python" "$predictor_project/server.py" "$@"

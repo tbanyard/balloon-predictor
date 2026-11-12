@@ -1,16 +1,16 @@
 # Paths are relative to this file. No credentials belong here.
-data_dir: data
+# data_dir: /absolute/path/to/weather-data  # Default: the current user’s app data.
 workers: 2
 max_weather_mb: 2048
 # Estimated uncompressed bytes limit per model-box export.
 max_export_mb: 4096
 # Optional existing regional GeoTIFF directory; default is <data_dir>/terrain.
-# terrain_dir: /data1/tim/terrain
+# terrain_dir: /path/to/geotiffs
 
 # Read the same model-level files as the companion ERA5 viewer.
-era5_root: /data3/ERA5
+# era5_root: /data3/ERA5  # Automatically detected if present.
 # Native wrfout files, including files around 10 GB, stay in this directory.
-wrf_root: /data1/tim/SkySightWRF
+# wrf_root: /path/to/wrf-runs
 # Budget for decoded column data. Horizontal geometry uses additional RAM.
 cache_mb: 256
 # Never interpolate through missing days or long gaps.

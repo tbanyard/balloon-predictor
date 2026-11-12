@@ -2,13 +2,13 @@
 
 ## Use large files directly
 
-The default is `/data1/tim/SkySightWRF`. WRF-ARW NetCDF output does not need a
+The default is the `wrf` folder in your data directory. WRF-ARW NetCDF output does not need a
 conversion or browser upload:
 
 ```text
-/data1/tim/SkySightWRF/run-2024-01-15/wrfout_d01_2024-01-15_00:00:00
-/data1/tim/SkySightWRF/run-2024-01-15/wrfout_d02_2024-01-15_00:00:00
-/data1/tim/SkySightWRF/run-2024-01-16/wrfout_d02_2024-01-16_00:00:00
+/path/to/wrf-runs/run-2024-01-15/wrfout_d01_2024-01-15_00:00:00
+/path/to/wrf-runs/run-2024-01-15/wrfout_d02_2024-01-15_00:00:00
+/path/to/wrf-runs/run-2024-01-16/wrfout_d02_2024-01-16_00:00:00
 ```
 
 Open **Manage weather → Rescan local data** and select the desired domain/run.
@@ -66,7 +66,7 @@ attachments. This release was validated with standard synthetic WRF-ARW output,
 not the user's actual SkySightWRF file. To check that file on your machine:
 
 ```bash
-ncdump -h '/data1/tim/SkySightWRF/run-folder/wrfout_d02_DATE_TIME'
+ncdump -h '/path/to/wrf-runs/run-folder/wrfout_d02_DATE_TIME'
 python -m balloon_predictor list
 python -m balloon_predictor inspect wrf-ID_FROM_LIST
 ```
@@ -77,7 +77,7 @@ The original **Use your WRF output or existing weather files** workflow remains:
 
 ```bash
 python -m balloon_predictor import-wrf --name my-wrf \
-  --files '/data1/tim/SkySightWRF/run-folder/wrfout_d02_*' \
+  --files '/path/to/wrf-runs/run-folder/wrfout_d02_*' \
   --area 60 -12 48 5 \
   --start 2024-01-15T00:00:00Z --end 2024-01-16T00:00:00Z
 ```

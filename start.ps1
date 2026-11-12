@@ -22,7 +22,6 @@ if ($env:CONDA_PREFIX -or $env:VIRTUAL_ENV) {
         New-Item $Ready -ItemType File -Force | Out-Null
     }
 }
-if (-not $env:BP_DATA_DIR -and -not $env:BP_CONFIG -and -not ($args | Where-Object { $_ -eq "--config" -or $_ -like "--config=*" })) { $env:BP_DATA_DIR = Join-Path $env:LOCALAPPDATA "BalloonPredictor\data" }
-Write-Host "BalloonPredictor v1.4 · default http://127.0.0.1:8001 · Ctrl+C to stop."
+Write-Host "BalloonPredictor v1.5 · default http://127.0.0.1:8001 · Ctrl+C to stop."
 & $PredictorPython "$PSScriptRoot\server.py" @args
 exit $LASTEXITCODE

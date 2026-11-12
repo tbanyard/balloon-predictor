@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.0
+
+- Local, web and SSH desktop connection modes, animated startup, and Debian package.
+- Android Server settings keep the live flight and tunnel when returning.
+- Desktop data folder control, per-user defaults, and discoverable processing logs.
+- Archive dates follow launches; floating Profile and inactive descent controls corrected.
+- Rounded sensitivity regions for multiple endpoint samples.
+
 ## v1.4.0 — 2026-11-06
 
 - Remove section numbers; rename the metrics/download panel Flight Details and

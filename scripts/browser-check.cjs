@@ -13,10 +13,10 @@ sys.path.insert(0,'tests')
 from conftest import make_wrf_file
 from scripts.make_test_data import make_file,make_topography
 from netCDF4 import Dataset
-p=Path(sys.argv[1]);opts=dict(lat=[55,53,51],lon=[354,356,358],constant=False)
+p=Path(sys.argv[1]);opts=dict(lat=[64,58,53,48,40],lon=[335,345,354,358,362,370],constant=False)
 make_file(p/'era5/2024/era5_2024d015.nc',date='2024-01-15',times=(21,23),**opts)
 make_file(p/'era5/2024/era5_2024d016.nc',date='2024-01-16',times=(0,3),**opts)
-make_topography(p/'era5/era5_topo.nc',lat=[55,53,51],lon=[354,356,358],heights=100)
+make_topography(p/'era5/era5_topo.nc',lat=[64,58,53,48,40],lon=[335,345,354,358,362,370],heights=100)
 p.joinpath('wrf').mkdir();w=p/'wrf/wrfout_d02_2024-01-15_12:00:00';make_wrf_file(w)
 with Dataset(w,'a') as nc:
  nc.SIMULATION_START_DATE='2024-01-15_00:00:00'
@@ -31,25 +31,40 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
 (async()=>{
  try{
   let ready=false;for(let i=0;i<100;i++){try{if((await fetch(base+'/api/health')).ok){ready=true;break;}}catch{}await delay(100);}
-  assert(ready,'Server failed: '+logs);browser=await chromium.launch({headless:true, ...(process.env.BP_TEST_CHROME?{executablePath:process.env.BP_TEST_CHROME,args:["--no-sandbox","--disable-dev-shm-usage"]}: {})});const context=await browser.newContext({viewport:{width:1540,height:1000},deviceScaleFactor:1});
+  assert(ready,'Server failed: '+logs);browser=await chromium.launch({headless:true, ...(process.env.BP_TEST_CHROME?{executablePath:process.env.BP_TEST_CHROME,args:["--no-sandbox","--disable-dev-shm-usage"]}: {})});const context=await browser.newContext({viewport:{width:1540,height:1000},deviceScaleFactor:1,acceptDownloads:true});
   await context.route('https://**/*',route=>route.abort());const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.waitForFunction(()=>document.querySelector('#flight-tabs button'));
-  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.4','Version badge missing');
-  await page.selectOption('#available-day','2024-01-15');await page.waitForFunction(()=>document.querySelector('#launch_datetime').value.startsWith('2024-01-15T21:00'));
-  await page.fill('#burst_altitude','25000');await page.fill('#launch_altitude','101');await page.click('#ground-button');await page.waitForFunction(()=>document.querySelector('#ground-comparison').textContent.includes('Model ground:')); 
+  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.5','Version badge missing');
+  await page.fill('#launch_datetime','2024-01-16T02:00');await page.locator('#launch_datetime').dispatchEvent('change');
+  await page.waitForFunction(()=>document.querySelector('#available-day').value==='2024-01-16');
+  await page.fill('#launch_datetime','2024-01-17T02:00');await page.locator('#launch_datetime').dispatchEvent('change');
+  assert(await page.inputValue('#available-day')==='', 'Unavailable day selected the first archive date');
+  await page.selectOption('#available-day','2024-01-15');
+  assert((await page.inputValue('#launch_datetime')).startsWith('2024-01-15T02:00'),'Archive date changed the launch hour');
+  await page.fill('#launch_datetime','2024-01-15T21:00');await page.locator('#launch_datetime').dispatchEvent('change');
+  await page.evaluate(()=>{document.querySelector('#ensemble_members').value='3';document.querySelector('#time_step').value='60';});
+  await page.fill('#burst_altitude','3000');await page.fill('#launch_altitude','101');await page.click('#ground-button');await page.waitForFunction(()=>document.querySelector('#ground-comparison').textContent.includes('Model ground:'));
   await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#flight-result').hidden,{},{timeout:30000});
   assert((await page.textContent('#metric-endpoint-label'))==='LANDING','Landing calculation failed');
+  await page.selectOption('#sensitivity-display','region');
+  assert(await page.evaluate(()=>{const layers=flightLayer.getLayers();return layers.some(p=>p instanceof L.Polygon&&String(p.getTooltip()?.getContent()).startsWith('Sensitivity region'))&&!layers.some(p=>String(p.getTooltip()?.getContent()).startsWith('Sensitivity member'));}),'Region did not replace member dots');
+  await page.selectOption('#sensitivity-display','members');
   await page.click('#sounding-open');await page.waitForFunction(()=>document.querySelectorAll('#uv-chart path').length===2);
   assert((await page.textContent('#sounding-note')).includes('Humidity is absent'),'Dry ERA5 invented moisture');
+  assert(await page.evaluate(()=>{const panel=document.querySelector('#sounding-panel'),bar=document.querySelector('.dock-divider');
+    const p=panel.getBoundingClientRect(),b=bar.getBoundingClientRect(),x=Math.max(p.left,b.left)+10,y=b.top+b.height/2;
+    return y>p.top&&y<p.bottom&&document.elementFromPoint(x,y)?.closest('#sounding-panel')===panel;}),'Floating Profile is underneath the split handle');
   await page.screenshot({path:path.join(output,'era5-sounding-desktop.png')});
   const pop=context.waitForEvent('page');await page.click('#sounding-popout');const sounding=await pop;await sounding.waitForLoadState();await sounding.waitForFunction(()=>document.querySelectorAll('#uv-chart path').length===2);
   await sounding.selectOption('#sounding-mode','launch');await sounding.waitForFunction(()=>document.querySelector('#sounding-note').textContent.startsWith('Fixed column'));
   assert((await sounding.locator('#sounding-csv').getAttribute('href')).includes('mode=launch'),'Sounding CSV missing');await sounding.close();
   await page.getByRole('button',{name:'Minimise Flight Profile panel',exact:true}).click();await page.click('#duplicate-flight');await page.fill('#flight_name','WRF coastal launch');
   const wrf=await page.locator('#dataset option').evaluateAll(options=>options.find(o=>o.value.startsWith('wrf-')).value);
-  await page.selectOption('#dataset',wrf);await page.selectOption('#flight_mode','ascent');await page.fill('#launch_latitude','52');await page.fill('#launch_longitude','-5');await page.fill('#launch_altitude','100');await page.fill('#burst_altitude','1500');
+  await page.selectOption('#dataset',wrf);await page.fill('#launch_datetime','2024-01-15T12:00');await page.selectOption('#flight_mode','ascent');await page.fill('#launch_latitude','52');await page.fill('#launch_longitude','-5');await page.fill('#launch_altitude','100');await page.fill('#burst_altitude','1500');
   await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#flight-result').hidden,{},{timeout:30000});
+  assert(Number(await page.inputValue('#launch_longitude'))===-5,'Editing latitude and longitude lost the entered longitude');
   assert((await page.textContent('#metric-stages')).includes('ascent only'),'Target-only flight failed');
+  assert(await page.locator('#descent-model-field').evaluate(e=>e.classList.contains('is-inactive')&&e.querySelector('select').disabled),'Descent model lacks inactive styling');
   await page.click('#sounding-open');await page.waitForFunction(()=>document.querySelector('#sounding-note').textContent.includes('Dew point from model humidity'));
   assert(await page.locator('#skewt-chart path[stroke="#28645a"]').getAttribute('d'),'WRF dew point missing');await page.screenshot({path:path.join(output,'wrf-target-desktop.png')});
   await page.getByRole('button',{name:'Minimise Flight Profile panel',exact:true}).click();await page.locator('#flight-tabs button').first().click();assert(!(await page.locator('#flight-result').isHidden()),'Switching launch tabs lost the original flight');
@@ -61,11 +76,23 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   assert(await page.textContent('#metric-endpoint-label')==='TARGET / BURST','Burst endpoint inspection failed');
   const exportURL=await page.locator('[data-format=csv]').getAttribute('href');const exported=await (await fetch(base+exportURL)).text();assert(exported.startsWith('flight_index,flight_name'),'Series CSV export failed');
   await page.screenshot({path:path.join(output,'multi-launch-series-desktop.png')});
-  const download=page.waitForEvent('download');await page.click('#export-session');const file=await download,setupPath=path.join(tmp,'setups.json');await file.saveAs(setupPath);assert(JSON.parse(fs.readFileSync(setupPath)).sites.length===2,'Setup export lost launch points');
+  // Inspect the actual exported Blob in Chromium. Installed app tests cover
+  // writing files to disk, which a headless browser sandbox can disallow.
+  await page.evaluate(()=>{const create=URL.createObjectURL,click=HTMLAnchorElement.prototype.click;
+    URL.createObjectURL=blob=>{window.__setupExport=blob.text();return create(blob);};
+    HTMLAnchorElement.prototype.click=function(){if(!this.href.startsWith('blob:'))return click.call(this);window.__setupFilename=this.download;};
+  });
+  await page.click('#export-session');
+  const setup=await page.evaluate(()=>window.__setupExport),setupPath=path.join(tmp,'setups.json');
+  assert(JSON.parse(setup).sites.length===2,'Setup export lost launch points');
+  assert(await page.evaluate(()=>window.__setupFilename)==='balloon-predictor-launch-setups.json','Setup filename missing');
+  fs.writeFileSync(setupPath,setup);
   await page.reload();await page.waitForFunction(()=>document.querySelectorAll('#flight-tabs button').length===2);assert((await page.locator('#flight-tabs button').last().textContent())==='WRF coastal launch','Saved setup names changed');
   await page.setInputFiles('#import-session',setupPath);await page.waitForFunction(()=>document.querySelectorAll('#flight-tabs button').length===2);
-  await page.selectOption('#dataset','demo');await page.selectOption('#run_mode','arrival');
-  await page.fill('#arrival_datetime','2024-01-16T18:00:00');await page.fill('#arrival_altitude','1000');await page.fill('#arrival_rates','5,4,3,2');await page.selectOption('#arrival_sites','current');
+  await page.selectOption('#dataset','demo');
+  if(!await page.locator('#run_mode').isVisible())await page.locator('#schedule-details summary').click();
+  await page.selectOption('#run_mode','arrival');
+  await page.fill('#arrival_datetime','2024-01-16T18:00');await page.fill('#arrival_altitude','1000');await page.fill('#arrival_rates','5,4,3,2');await page.selectOption('#arrival_sites','current');
   await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#arrival-results').hidden,{},{timeout:30000});
   assert(await page.locator('#arrival-results tbody tr').count()===4,'Coordinated arrival table missing');
   assert(await page.locator('#sonde-netcdf').isVisible(),'Sonde NetCDF link missing');
@@ -88,7 +115,7 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   await page.screenshot({path:path.join(output,'coordinated-arrival-desktop.png')});
   await page.setViewportSize({width:390,height:844});await page.click('#sidebar-reopen');assert(await page.locator('#sidebar-backdrop').isVisible(),'Mobile drawer backdrop missing');await page.screenshot({path:path.join(output,'mobile-launch-controls.png'),fullPage:true});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth+2),'Mobile page overflows horizontally');
-  await page.click('#sidebar-backdrop');await page.click('#weather-open');assert(await page.locator('#rescan-weather').isVisible(),'Local rescan missing');await page.selectOption('#download-source','ifs');assert(await page.locator('#cycle-field').isVisible(),'Original download window regressed');await page.click('#weather-close');
+  await page.locator('#sidebar-backdrop').click({position:{x:385,y:200}});await page.click('#weather-open');assert(await page.locator('#rescan-weather').isVisible(),'Local rescan missing');await page.selectOption('#download-source','ifs');assert(await page.locator('#cycle-field').isVisible(),'Original download window regressed');await page.click('#weather-close');
   assert(!errors.length,'Browser errors: '+errors.join('\n'));console.log('Browser regression: PASS · ERA5, WRF, tabs, series, target, soundings, exports, offline coastlines, responsive layout');console.log('Screenshots: '+output);
  }catch(e){console.error(e.stack);if(logs)console.error(logs.slice(-5000));process.exitCode=1;}
  finally{if(browser)await browser.close();server.kill();server.once('exit',()=>fs.rmSync(tmp,{recursive:true,force:true}));}

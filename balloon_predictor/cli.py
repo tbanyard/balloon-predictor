@@ -123,6 +123,7 @@ def main(argv=None):
             import uvicorn
             if settings.config_path:
                 os.environ["BP_CONFIG"] = str(settings.config_path)
+            print(f"Weather data: {settings.data_dir}\nJob log: {settings.log_path}", flush=True)
             # A single process keeps weather caches/jobs consistent.
             uvicorn.run("balloon_predictor.api:app", host=args.host, port=args.port, reload=args.reload)
         elif args.command == "list":

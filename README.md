@@ -1,4 +1,6 @@
-# BalloonPredictor v1.4
+# BalloonPredictor v1.5
+
+See [the v1.5 changes and supported installers](docs/V1.5.md).
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
@@ -23,7 +25,7 @@ changes and a ready-to-follow GitHub upload guide.
 | ERA5T | Preliminary recent reanalysis, usually about five days behind real time | Uses the same CDS datasets; identifies GRIB expver=5 and records the available release |
 | ECMWF operational / IFS | Actual weather forecasts | Downloads ECMWF open data, with a selected cycle or the latest available 00/12 UTC cycle |
 | NOAA GFS | Operational forecasts | Downloads regional 0.25° NOMADS atmospheric/surface subsets; latest available or explicit 00/06/12/18 UTC cycle |
-| WRF | Your own model output | Reads large native WRF-ARW files directly from /data1/tim/SkySightWRF, with separate run/domain choices; cropped imports remain available |
+| WRF | Your own model output | Reads large native WRF-ARW files directly from your configured archive, with separate run/domain choices; cropped imports remain available |
 | Demo | Synthetic analytical atmosphere | Lets you run the whole application without credentials or weather downloads |
 
 “ERA5 operational” can mean the regularly updated ERA5/ERA5T reanalysis, or
@@ -34,7 +36,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-v1.4 directory. Initial installation needs internet
+the extracted balloon-predictor-1.5.0 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 Generated data is per-user under `~/.local/share/balloon-predictor` unless
@@ -42,12 +44,19 @@ Generated data is per-user under `~/.local/share/balloon-predictor` unless
 
 **macOS / Linux**
 
+For the standalone Mac app, see [BalloonPredictor for macOS](desktop/macos/MACOS.md).
+To run the server from source, use a terminal:
+
 ~~~bash
 chmod +x start.sh
 ./start.sh
 ~~~
 
 **Windows PowerShell**
+
+For the standalone x64 desktop installer and its test build, see
+[BalloonPredictor for Windows](desktop/windows/WINDOWS.md).
+To run the server from source, use PowerShell:
 
 ~~~powershell
 .\start.ps1
@@ -244,7 +253,7 @@ is also set.
 
 ## Use defined WRF output
 
-For direct use, keep `wrfout*` files under `/data1/tim/SkySightWRF` (one folder
+For direct use, keep `wrfout*` files under your configured `wrf_root` (one folder
 per run), click **Manage weather → Rescan local data**, and select the run/domain.
 This is the recommended path for large files. The original cropped importer
 below remains available.

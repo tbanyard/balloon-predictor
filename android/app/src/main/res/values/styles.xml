@@ -1,0 +1,5 @@
+<resources><style name="BalloonTheme" parent="android:style/Theme.Material.Light.NoActionBar">
+<item name="android:fontFamily">sans</item><item name="android:colorAccent">#BD4824</item>
+<item name="android:windowBackground">#EFF3EB</item><item name="android:windowLightStatusBar">true</item>
+<item name="android:statusBarColor">#EFF3EB</item><item name="android:navigationBarColor">#EFF3EB</item>
+<item name="android:windowLightNavigationBar">true</item></style></resources>

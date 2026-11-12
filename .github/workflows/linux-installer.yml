@@ -1,0 +1,50 @@
+name: Debian installer (test)
+on:
+  push:
+    branches: [release-v1.5-test]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: debian-installer-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    container:
+      image: debian:12
+    timeout-minutes: 30
+    env:
+      DEBIAN_FRONTEND: noninteractive
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+    steps:
+      - name: Install build and test tools
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git ca-certificates python3 python3-pip xvfb xauth dbus-x11 xz-utils
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Build the Debian package
+        run: python3 desktop/linux/build.py "$RUNNER_TEMP/debian-dist"
+      - name: Install the package and test GTK WebKit
+        shell: bash
+        run: |
+          apt-get install -y "$RUNNER_TEMP"/debian-dist/*.deb
+          useradd --create-home balloon-test
+          # Only the temporary CI WebKit instance loads this local synthetic fixture.
+          runuser -u balloon-test -- xvfb-run -a dbus-run-session -- env LIBGL_ALWAYS_SOFTWARE=1 \
+            WEBKIT_DISABLE_SANDBOX_THIS_IS_DANGEROUS=1 \
+            balloon-predictor --smoke-test /home/balloon-test/installed-check || {
+              cat /home/balloon-test/installed-check/BalloonPredictor.log
+              exit 1
+            }
+          cp /home/balloon-test/installed-check/smoke-result.json "$RUNNER_TEMP/debian-dist/"
+      - name: Upload the tested installer
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: BalloonPredictor-Debian-amd64-test
+          path: ${{ runner.temp }}/debian-dist/
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30

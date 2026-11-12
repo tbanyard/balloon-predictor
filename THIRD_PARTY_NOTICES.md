@@ -44,3 +44,9 @@ licence and attribution are described at https://registry.opendata.aws/copernicu
 and https://copernicus-dem-30m.s3.amazonaws.com/readme.html . Users must follow
 the linked Copernicus DEM licence for downloaded data. Rasterio and its bundled
 GDAL dependencies retain their upstream licences in their installed packages.
+
+## Desktop SSH and Android
+
+Desktop builds include AsyncSSH and PyCA cryptography with their wheel
+licences. Android includes mwiede/JSch and Bouncy Castle with their notices
+in the APK assets. Debian uses the system GTK and WebKitGTK runtime.

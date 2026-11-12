@@ -1,0 +1,63 @@
+name: Android app (test)
+on:
+  push:
+    branches: [release-v1.5-test]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-app-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build-and-test:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android platform and test dependencies
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;35.0.0"
+          python -m pip install -r requirements.lock.txt asyncssh==2.24.1 cryptography==50.0.2
+      - name: Build and verify the APK
+        env:
+          BP_APK_STORE: ${{ secrets.BP_ANDROID_KEYSTORE }}
+          BP_APK_STORE_PASS: ${{ secrets.BP_ANDROID_STORE_PASSWORD }}
+          BP_APK_KEY_PASS: ${{ secrets.BP_ANDROID_KEY_PASSWORD }}
+        run: |
+          signing=()
+          if [[ -n "$BP_APK_STORE" ]]; then
+            umask 077
+            printf '%s' "$BP_APK_STORE" | base64 --decode > "$RUNNER_TEMP/bp-signing.p12"
+            trap 'rm -f "$RUNNER_TEMP/bp-signing.p12"' EXIT
+            signing+=(--keystore "$RUNNER_TEMP/bp-signing.p12")
+          fi
+          python android/build.py "$RUNNER_TEMP/android-dist" --test-output "$RUNNER_TEMP/android-tests" "${signing[@]}"
+      - name: Enable emulator acceleration
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-bp-kvm.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Install and test SSH and flight session preservation
+        uses: reactivecircus/android-emulator-runner@324029e2f414c084d8b15ba075288885e74aef9c # v2.34.0
+        with:
+          api-level: 36
+          arch: x86_64
+          target: google_apis
+          disable-animations: true
+          script: bash android/test-emulator.sh "$RUNNER_TEMP/android-dist" "$RUNNER_TEMP/android-tests"
+      - name: Upload the tested APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: BalloonPredictor-Android-test
+          path: ${{ runner.temp }}/android-dist/
+          if-no-files-found: error
+          retention-days: 30

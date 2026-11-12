@@ -1,13 +1,13 @@
-# BalloonPredictor v1.4
+# BalloonPredictor v1.5
 
-Extract the ZIP into `/data1/tim`. Its `balloon-predictor-v1.4` folder can sit
+Extract the source ZIP anywhere you can write. Its `balloon-predictor-1.5.0` folder can sit
 beside v1.3. Python 3.12 is recommended. To keep concurrently running versions
 independent, use a separate Conda environment:
 
 ```bash
 conda create -n balloon-v14 -c conda-forge python=3.12 pip
 conda activate balloon-v14
-cd /data1/tim/balloon-predictor-v1.4
+cd balloon-predictor-1.5.0
 python -m pip install -r requirements.lock.txt
 python -m pip check
 bash start.sh --port 8001
@@ -17,7 +17,7 @@ Install once in that environment. For subsequent launches:
 
 ```bash
 conda activate balloon-v14
-cd /data1/tim/balloon-predictor-v1.4
+cd balloon-predictor-1.5.0
 bash start.sh --port 8001
 ```
 
@@ -26,7 +26,7 @@ already on 8001, or stop that server first. A server on port 8000 can keep
 running in its own environment. Avoid changing packages in an environment used
 by another running application.
 
-The v1.4 dependency lock is unchanged from v1.3. A compatible existing environment
+The server dependency lock is unchanged from v1.4. A compatible existing environment
 can be used; matching packages do not need reinstalling. Without an activated
 environment, `bash start.sh` manages a per-user environment automatically. That
 automatic environment is shared across predictor versions, so use explicitly
@@ -100,4 +100,4 @@ geometric line or eliminate forecast uncertainty.
 - [docs/V1.4.md](docs/V1.4.md): changes and verification limits.
 - [docs/V1.3.md](docs/V1.3.md): model-box contents, terrain physics and cleanup.
 - [docs/API-AND-ORIGINS.md](docs/API-AND-ORIGINS.md): API/OAS/GET/POST and Data origins.
-- [docs/GIT.md](docs/GIT.md): GitHub upload and `v1.4.0` release tag.
+- [docs/V1.5.md](docs/V1.5.md): supported installers and release notes.
