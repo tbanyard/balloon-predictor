@@ -97,7 +97,7 @@ def verify_minimum(path, arch):
 
 
 def sign_app(app, executable, runtime):
-    run("lipo", "-verify_arch", *RUNTIMES, str(executable))
+    run("lipo", str(executable), "-verify_arch", *RUNTIMES)
     for arch in RUNTIMES:
         verify_minimum(executable, arch)
         for path in native_files(runtime / arch):
