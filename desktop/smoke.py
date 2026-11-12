@@ -110,7 +110,8 @@ def check_runtime(url, store):
     for endpoint, expected in (("sonde-export", "sonde"), ("model-box", "model-box")):
         job = fetch(f"/api/predictions/{flight['id']}/{endpoint}", {"scope": "ascent"})
         result = completed(job)
-        payload = fetch(f"/api/exports/{job['id']}/download")
+        download_path = f"/api/exports/{job['id']}/download"
+        payload = fetch(download_path)
         assert payload[:8] == b"\x89HDF\r\n\x1a\n" and len(payload) == result["bytes"]
         path = directory / "raw" / (expected + ".nc")
         path.write_bytes(payload)
@@ -121,3 +122,4 @@ def check_runtime(url, store):
                 assert len(nc.dimensions["time"]) == 2 and len(nc.dimensions["level"]) == 3
                 assert np.all(np.isfinite(nc["u"][:]))
         LOG.info("Generated, downloaded and reopened %s NetCDF.", expected)
+    return download_path

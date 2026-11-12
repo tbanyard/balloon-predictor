@@ -42,6 +42,9 @@ Generated data is per-user under `~/.local/share/balloon-predictor` unless
 
 **macOS / Linux**
 
+For the standalone Mac app, see [BalloonPredictor for macOS](desktop/macos/MACOS.md).
+To run the server from source, use a terminal:
+
 ~~~bash
 chmod +x start.sh
 ./start.sh
