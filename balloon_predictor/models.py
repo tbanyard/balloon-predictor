@@ -150,6 +150,7 @@ class CleanupRequest(StrictModel):
 class TerrainDownloadRequest(StrictModel):
     latitude: float = Field(ge=-85, le=85)
     longitude: float = Field(ge=-180, le=360)
+    verify_pixel: bool = False
 
 
 class SondeExportRequest(StrictModel):

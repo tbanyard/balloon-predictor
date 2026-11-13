@@ -1,13 +1,13 @@
-# BalloonPredictor v1.5
+# BalloonPredictor v1.5.1
 
-Extract the source ZIP anywhere you can write. Its `balloon-predictor-1.5.0` folder can sit
+Extract the source ZIP anywhere you can write. Its `balloon-predictor-1.5.1` folder can sit
 beside v1.3. Python 3.12 is recommended. To keep concurrently running versions
 independent, use a separate Conda environment:
 
 ```bash
 conda create -n balloon-v14 -c conda-forge python=3.12 pip
 conda activate balloon-v14
-cd balloon-predictor-1.5.0
+cd balloon-predictor-1.5.1
 python -m pip install -r requirements.lock.txt
 python -m pip check
 bash start.sh --port 8001
@@ -17,7 +17,7 @@ Install once in that environment. For subsequent launches:
 
 ```bash
 conda activate balloon-v14
-cd balloon-predictor-1.5.0
+cd balloon-predictor-1.5.1
 bash start.sh --port 8001
 ```
 

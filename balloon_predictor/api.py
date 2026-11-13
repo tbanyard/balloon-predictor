@@ -16,7 +16,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from . import __version__
-from .errors import PredictorError
+from .errors import MissingTerrainError, PredictorError
 from .exports import arrival_csv_export, csv_export, geojson, kml_export
 from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest, SondeExportRequest
 from .storage import activity, inventory, cleanup, StorageLeaseMiddleware
@@ -76,6 +76,8 @@ class Jobs:
                 if isinstance(exc, PredictorError) and "server log" in message:
                     message += " " + log
                 outcome = dict(status="failed", message=message, error=message)
+                if isinstance(exc, MissingTerrainError):
+                    outcome["error_details"] = exc.details()
             with self.lock:
                 # A terminal job may be cleaned up immediately.
                 lease.__exit__(None, None, None)
@@ -143,7 +145,10 @@ def create_app(settings=None):
 
     @app.exception_handler(PredictorError)
     async def known_error(request: Request, exc: PredictorError):
-        return JSONResponse(status_code=422, content={"detail": str(exc)})
+        body = {"detail": str(exc)}
+        if isinstance(exc, MissingTerrainError):
+            body["error_details"] = exc.details()
+        return JSONResponse(status_code=422, content=body)
 
     @app.get("/api/health")
     def health():
@@ -347,7 +352,12 @@ def create_app(settings=None):
 
     @app.post("/api/terrain/download", status_code=202)
     def download_terrain(body: TerrainDownloadRequest):
-        return jobs.submit("terrain", lambda progress: store.terrain.download(body.latitude,body.longitude,progress))
+        def task(progress):
+            result = store.terrain.download(body.latitude, body.longitude, progress)
+            if body.verify_pixel:
+                store.terrain.sample(body.latitude, body.longitude)
+            return result
+        return jobs.submit("terrain", task)
 
     @app.post("/api/predictions/{job_id}/sonde-export", status_code=202)
     def prepare_sonde_export(job_id: str, body: SondeExportRequest):
@@ -379,6 +389,12 @@ def create_app(settings=None):
             raise HTTPException(409, "Prediction is not complete.")
         return jobs.submit("export", lambda progress: export_model_boxes(record["result"],body,store,progress))
 
+    @app.post("/api/predictions/{job_id}/offline-pack", status_code=202)
+    def offline_pack(job_id: str, flight_index: int = Query(default=0, ge=0)):
+        from .offline import export_forecast_pack
+        result = selected_result(job_id, flight_index)
+        return jobs.submit("export", lambda progress: export_forecast_pack(result, store, progress))
+
     @app.get("/api/exports/{job_id}/download")
     def model_box_download(job_id: str):
         record = jobs.get(job_id)
@@ -388,7 +404,8 @@ def create_app(settings=None):
         path = Path(result["path"])
         if not path.is_file() or not path.resolve().is_relative_to((settings.data_dir / "exports").resolve()):
             raise HTTPException(404, "Export was cleared. Create it again from the prediction.")
-        return FileResponse(path, filename=result["filename"], media_type="application/zip" if path.suffix==".zip" else "application/x-netcdf")
+        content_type = {".zip": "application/zip", ".bpforecast": "application/octet-stream"}.get(path.suffix, "application/x-netcdf")
+        return FileResponse(path, filename=result["filename"], media_type=content_type)
 
     @app.get("/api/jobs/{job_id}")
     def get_job(job_id: str):

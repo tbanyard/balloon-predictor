@@ -3,7 +3,7 @@ import copy
 import math
 import numpy as np
 
-from .errors import CoverageError, PredictorError
+from .errors import CoverageError, MissingTerrainError, PredictorError
 from .weather.interpolate import DatasetWeather
 
 
@@ -81,10 +81,13 @@ class FlightWeather:
     def terrain(self, lat, lon):
         return self.base.terrain(lat, lon)
 
-    def dem(self, lat, lon):
+    def dem(self, lat, lon, phase=None):
         if not self.terrain_catalog:
             raise PredictorError("Physical DEM catalog is not configured.")
-        value, tile = self.terrain_catalog.sample(lat, lon, self.request.dem_id)
+        try:
+            value, tile = self.terrain_catalog.sample(lat, lon, self.request.dem_id)
+        except MissingTerrainError as exc:
+            raise exc.during(phase) from exc
         from .provenance import record_file
         record_file(self.model, self.terrain_catalog.root / tile)
         used = self.info["physical_ground"].setdefault("tiles", [])
@@ -96,7 +99,7 @@ class FlightWeather:
         req = self.request
         lat, lon = req.launch_latitude, req.launch_longitude
         if req.ground_source == "dem":
-            return self.dem(lat, lon)
+            return self.dem(lat, lon, "launch")
         if req.ground_source == "model":
             return self.terrain(lat, lon)
         return req.ground_altitude

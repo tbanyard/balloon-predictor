@@ -49,7 +49,21 @@ public final class FlightTest extends Instrumentation {
             check("true".equals(js(original,"document.querySelector('#flight_name').value==='Keep this flight' && !document.querySelector('#flight-result').hidden")),"Return lost the flight");
             runOnMainSync(()->{app.serverButton.performClick();app.onBackPressed();});
             check(onMain(()->app.web==original&&original.getVisibility()==View.VISIBLE),"Back did not return to active flight");
-            result.putString("stream","\nBP_ANDROID_PASS: verified SSH login, flight, and both return paths.\n");
+            runOnMainSync(()->{
+                app.serverButton.performClick();app.mode.setSelection(2);app.connect(null);
+            });
+            waitFor(()->onMain(()->app.web!=null&&app.web!=original),"offline WebView");
+            WebView offline=onMain(()->app.web);
+            waitFor(()->"true".equals(js(offline,"Boolean(document.querySelector('#forecast') && window.L)")),"offline assets");
+            String fixture=args.getString("offline_fixture");
+            js(offline,"(()=>{const raw=Uint8Array.from(atob('"+fixture+"'),c=>c.charCodeAt(0));"
+                +"const transfer=new DataTransfer();transfer.items.add(new File([raw],'fixture.bpforecast'));"
+                +"const input=document.querySelector('#forecast');input.files=transfer.files;input.dispatchEvent(new Event('change'));})()");
+            waitFor(()->"true".equals(js(offline,"document.querySelector('#flight').hidden===false")),"decoded offline forecast");
+            js(offline,"document.querySelector('#calculate').click()");
+            waitFor(()->"true".equals(js(offline,"document.querySelector('#result').hidden===false")),"locally calculated flight");
+            check("true".equals(js(offline,"document.querySelector('#status').textContent.includes('on this phone')")),"Offline solver was not used");
+            result.putString("stream","\nBP_ANDROID_PASS: SSH login, both return paths, and an offline forecast flight.\n");
             runOnMainSync(app::finish);finish(Activity.RESULT_OK,result);
         }catch(Throwable error){
             result.putString("stream","\nBP_ANDROID_FAIL: "+android.util.Log.getStackTraceString(error));

@@ -4,7 +4,7 @@ import math
 
 import numpy as np
 
-from .errors import CoverageError, PredictorError
+from .errors import CoverageError, MissingTerrainError, PredictorError
 from .weather.schema import EARTH_RADIUS
 from .context import flight_weather
 
@@ -32,7 +32,7 @@ def run_flight(request, weather, wind_bias=(0, 0)):
 
     def ground(s):
         return (weather.terrain(s[0], s[1]) if request.landing_mode == "terrain" else
-                weather.dem(s[0], s[1]) if request.landing_mode == "dem" else request.landing_altitude)
+                weather.dem(s[0], s[1], "descent") if request.landing_mode == "dem" else request.landing_altitude)
 
     launch_ground = weather.launch_ground()
     if launch_ground is not None and state[2] < launch_ground - 1:
@@ -206,6 +206,8 @@ def predict_batch(request, store, progress=None):
                 entry.update(status="completed", result=predict(body,store.get(body.dataset,launch)))
             except PredictorError as exc:
                 entry.update(status="failed",error=str(exc))
+                if isinstance(exc, MissingTerrainError):
+                    entry["error_details"] = exc.details()
             entries.append(entry)
     return {"type":"series","request":request.model_dump(mode="json"),"flights":entries,
             "completed":sum(e["status"]=="completed" for e in entries),

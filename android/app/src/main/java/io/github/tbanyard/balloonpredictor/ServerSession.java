@@ -21,10 +21,13 @@ final class ServerSession implements AutoCloseable {
         void savePin(String endpoint, String fingerprint);
         String[] credentials(String text, String[] prompts, boolean[] echo);
     }
+    static final String OFFLINE_ORIGIN="https://appassets.androidplatform.net";
     final String origin;
+    final boolean offline;
     private final Session ssh;
 
-    private ServerSession(String origin, Session ssh) { this.origin=origin; this.ssh=ssh; }
+    private ServerSession(String origin, Session ssh) { this.origin=origin; this.ssh=ssh; this.offline=OFFLINE_ORIGIN.equals(origin); }
+    static ServerSession offline(){return new ServerSession(OFFLINE_ORIGIN,null);}
 
     static ServerSession direct(String address, boolean allowHttp) {
         URI url;
@@ -36,6 +39,7 @@ final class ServerSession implements AutoCloseable {
             throw new IllegalArgumentException("Enter a server URL such as https://server.example.org.");
         if ("http".equals(scheme)&&!allowHttp) throw new IllegalArgumentException("Use HTTPS or allow HTTP on your trusted VPN or local network.");
         String origin=scheme+"://"+host.toLowerCase(java.util.Locale.ROOT)+(port>0&&port!=standard?":"+port:"");
+        if (OFFLINE_ORIGIN.equals(origin)) throw new IllegalArgumentException("Choose Run locally for the offline workspace.");
         if (!healthy(origin)) throw new IllegalArgumentException("BalloonPredictor did not answer. Check the VPN, address and port.");
         return new ServerSession(origin,null);
     }

@@ -1,6 +1,6 @@
-# BalloonPredictor v1.5
+# BalloonPredictor v1.5.1
 
-See [the v1.5 changes and supported installers](docs/V1.5.md).
+See [what changed in v1.5.1](docs/V1.5.1.md) and the [supported installers](docs/V1.5.md).
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
@@ -36,7 +36,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-1.5.0 directory. Initial installation needs internet
+the extracted balloon-predictor-1.5.1 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 Generated data is per-user under `~/.local/share/balloon-predictor` unless

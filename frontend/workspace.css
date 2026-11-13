@@ -101,3 +101,33 @@ details>summary{list-style:none;display:flex;align-items:center;justify-content:
 @media(prefers-reduced-motion:reduce){.workspace,.sidebar{transition:none}.loader-balloon,.loader-tether,.loader-cloud{animation:none}}
 
 .storage-location-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.storage-location-row input{min-width:min(100%,240px);flex:1}.map-legend .member-region{width:17px;height:10px;border-radius:6px;background:#588e7880;display:inline-block}
+
+/* Keep the trajectory banner one row wide; the overflow holds complete groups. */
+.map-toolbar{position:relative;z-index:21;flex:0 0 auto;flex-wrap:nowrap;min-height:48px;gap:8px}
+.map-heading{flex:0 1 auto;overflow:hidden;align-items:center}
+.map-heading .badge{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.map-toolbar .map-actions{display:flex;flex:0 0 auto;flex-wrap:nowrap;width:auto;align-items:center;gap:10px;margin:0 0 0 auto}
+.map-toolbar .window-open-buttons,#trajectory-actions,#trajectory-toggles{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.map-toolbar .text-button{margin:0;white-space:nowrap;font-size:11px}
+.trajectory-switch{display:flex;align-items:center;gap:3px;white-space:nowrap;min-height:32px;color:var(--muted)}
+.trajectory-switch .switch-caption{display:none}
+.trajectory-switch .switch-icon{display:grid;place-items:center;width:16px;height:18px;color:#677b71}
+.trajectory-switch .switch-icon svg{width:15px;height:15px}
+.trajectory-switch[data-value=ascent] [data-left],.trajectory-switch[data-value=burst] [data-left],.trajectory-switch[data-value=members] [data-left],.trajectory-switch[data-value=both] [data-right],.trajectory-switch[data-value=landing] [data-right],.trajectory-switch[data-value=region] [data-right]{color:#b84523}
+.trajectory-switch button{padding:0;border:1px solid #aec1b5;width:28px;height:16px;border-radius:12px;background:#edf2ed;cursor:pointer;position:relative}
+.trajectory-switch button>span{position:absolute;left:2px;top:2px;width:10px;height:10px;background:#688775;border-radius:50%;transition:transform .15s}
+.trajectory-switch button[aria-checked=true]>span{transform:translateX(12px);background:#d75b2c}
+.trajectory-switch button:disabled{opacity:.48;cursor:not-allowed}
+.trajectory-switch:has(button:disabled) [data-right]{opacity:.38}
+.trajectory-more{display:grid;place-items:center;flex:none;width:30px;height:30px;border:1px solid #d6e1d7;border-radius:6px;color:#315e50;background:#fff;cursor:pointer}
+.trajectory-more[aria-expanded=true]{background:#fff0e6;color:#a74521}
+.trajectory-menu{position:absolute;z-index:30;right:10px;top:calc(100% - 3px);min-width:216px;max-width:calc(100% - 20px);max-height:65vh;overflow:auto;display:flex;flex-direction:column;gap:3px;padding:9px 12px;border:1px solid #d5dfd5;border-radius:9px;background:#fff;box-shadow:0 8px 24px #20382b25}
+.trajectory-menu #trajectory-toggles,.trajectory-menu #trajectory-actions{flex-direction:column;align-items:stretch;gap:0}
+.trajectory-menu .trajectory-switch{min-height:37px;gap:5px}
+.trajectory-menu .switch-caption{display:inline;font-size:12px;color:var(--ink);margin-right:auto}
+.trajectory-menu .text-button{padding:9px 0;text-align:left;font-size:12px}
+.dem-recovery{margin:0 0 12px}.dem-recovery button{white-space:normal;text-align:left}.workspace-progress{align-items:center;flex-wrap:wrap;gap:4px 9px}
+.weather-progress{display:flex;align-items:center;gap:6px}.weather-progress .balloon-loader{width:21px;height:28px;flex:0 0 21px}.weather-progress .status-message{flex:1}
+@media(max-width:760px){.map-toolbar{min-height:42px;padding-block:5px}.map-toolbar .map-actions{gap:7px;width:auto}.map-toolbar #share-button{display:inline-block}.map-heading .badge{max-width:85px}.map-toolbar .window-open-buttons{gap:7px}.trajectory-menu .trajectory-switch button{min-width:31px;min-height:18px}.trajectory-menu .trajectory-switch button[aria-checked=true]>span{transform:translateX(15px)}}
+/* Keep focused plot windows below the toolbar's overflow sheet. */
+.window-area{isolation:isolate}

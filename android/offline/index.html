@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Offline flight · BalloonPredictor</title><link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css"><link rel="stylesheet" href="/offline/screen.css">
+<script src="/assets/vendor/leaflet/leaflet.js" defer></script><script src="/assets/coastlines.js" defer></script><script src="/offline/screen.js" defer></script></head>
+<body><main>
+<header><span>ON THIS PHONE</span><h1>Offline flight</h1><p>Recalculate one trajectory using a saved regional forecast. No connection is needed once the pack is on this phone.</p></header>
+<section><label class="choose">Open saved forecast <input id="forecast" type="file" accept=".bpforecast,application/octet-stream"></label>
+<p id="forecast-info" role="status">While connected, calculate a flight with downloaded IFS, GFS, or pressure-level ERA5 weather. In Flight Details choose <strong>Save offline forecast for Android</strong>, then open that file here.</p></section>
+<form id="flight" hidden>
+<div class="inputs">
+<label class="wide">Launch time (UTC)<input id="launch_datetime" type="datetime-local" step="1" required></label>
+<label>Latitude<input id="launch_latitude" type="number" step="any" min="-85" max="85" required></label>
+<label>Longitude<input id="launch_longitude" type="number" step="any" min="-180" max="360" required></label>
+<label>Launch altitude (m AMSL)<input id="launch_altitude" type="number" step="any" min="-500" required></label>
+<label>Ascent rate (m/s)<input id="ascent_rate" type="number" step="any" min=".001" max="30" required></label>
+<label>Endpoint<select id="flight_mode"><option value="full">Burst, descend &amp; land</option><option value="ascent">Stop at target altitude</option></select></label>
+<label><span id="height-label">Burst altitude (m AMSL)</span><input id="burst_altitude" type="number" step="any" max="55000" required></label>
+</div>
+<div id="descent" class="inputs">
+<label>Descent rate (m/s)<input id="descent_rate" type="number" step="any" min=".001" max="50" required></label>
+<label>Descent model<select id="descent_model"><option value="density">Density scaled</option><option value="constant">Constant speed</option></select></label>
+<label>Landing surface<select id="landing_mode"><option value="terrain">Forecast model terrain</option><option value="fixed">Known fixed elevation</option></select></label>
+<label id="fixed">Landing altitude (m AMSL)<input id="landing_altitude" type="number" step="any" min="-500" max="10000" required></label>
+</div>
+<p id="ground-note"></p><button id="calculate" type="submit">Calculate on this phone</button>
+</form>
+<p id="status" role="status" aria-live="polite"></p>
+<section id="result" hidden><h2>Predicted flight</h2><p id="endpoint"></p><div id="map" aria-label="Offline flight map"></div>
+<div class="exports"><button id="save-csv" type="button">Save CSV ↓</button><button id="save-geojson" type="button">Save GeoJSON ↓</button></div></section>
+<p class="limit">Offline mode includes the saved weather and coastline map. Fresh downloads, physical DEM, sensitivity, flight series and NetCDF exports use the server.</p>
+</main></body></html>

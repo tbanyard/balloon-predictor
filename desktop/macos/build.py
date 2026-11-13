@@ -127,7 +127,7 @@ def build(output):
         run(
             "xcrun", "--sdk", "macosx", "clang", "-arch", "arm64", "-arch", "x86_64",
             f"-mmacosx-version-min={MIN_MACOS}", "-fobjc-arc", "-O2",
-            "-framework", "Cocoa", "-framework", "WebKit", str(HERE / "launcher.m"),
+            "-framework", "Cocoa", "-framework", "WebKit", "-framework", "QuartzCore", str(HERE / "launcher.m"),
             "-o", str(executable),
         )
         info = {

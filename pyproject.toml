@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "balloon-predictor-local"
-version = "1.5.0"
+version = "1.5.1"
 description = "Balloon trajectories with ERA5, operational ECMWF/GFS, native WRF, coordinated arrivals and simulated sonde NetCDF"
 requires-python = ">=3.12"
 license = "MIT"

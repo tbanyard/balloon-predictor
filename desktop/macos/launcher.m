@@ -1,5 +1,7 @@
 #import <Cocoa/Cocoa.h>
 #import <WebKit/WebKit.h>
+#import <QuartzCore/QuartzCore.h>
+#include <math.h>
 
 #if defined(__arm64__)
 static NSString *const nativeArch = @"arm64";
@@ -11,6 +13,8 @@ static NSString *const nativeArch = @"x86_64";
 
 @interface BalloonApp : NSObject <NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate, WKDownloadDelegate>
 @property(nonatomic, strong) NSWindow *window;
+@property(nonatomic, strong) NSWindow *splash;
+@property(nonatomic) NSTimeInterval splashStart;
 @property(nonatomic, strong) WKWebView *web;
 @property(nonatomic, strong) NSTask *backend;
 @property(nonatomic, strong) NSFileHandle *shutdownPipe;
@@ -72,7 +76,51 @@ static NSString *const nativeArch = @"x86_64";
 }
 
 - (void)showConnection:(id)sender {
-    if (self.web && self.origin) [self.web loadRequest:[NSURLRequest requestWithURL:self.origin]];
+    if (self.web && self.origin) [self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[self.origin.absoluteString stringByAppendingString:@"?splash=done"]]]];
+}
+
+- (void)showSplash {
+    self.splash = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,324,268)
+                      styleMask:NSWindowStyleMaskBorderless backing:NSBackingStoreBuffered defer:NO];
+    self.splash.opaque = NO;
+    self.splash.backgroundColor = NSColor.clearColor;
+    self.splash.hasShadow = YES;
+    self.splash.releasedWhenClosed = NO;
+    NSView *card = [[NSView alloc] initWithFrame:NSMakeRect(10,10,304,248)];
+    card.wantsLayer = YES;
+    card.layer.cornerRadius = 24;
+    card.layer.backgroundColor = [NSColor colorWithRed:1 green:.968 blue:.937 alpha:1].CGColor;
+    NSView *root = [[NSView alloc] initWithFrame:NSMakeRect(0,0,324,268)];
+    [root addSubview:card];
+    self.splash.contentView = root;
+    NSImageView *logo = [[NSImageView alloc] initWithFrame:NSMakeRect(91,97,122,122)];
+    NSURL *icon = [NSBundle.mainBundle URLForResource:@"BalloonPredictor" withExtension:@"icns"];
+    logo.image = [[NSImage alloc] initWithContentsOfURL:icon];
+    logo.imageScaling = NSImageScaleProportionallyUpOrDown;
+    logo.wantsLayer = YES;
+    [card addSubview:logo];
+    if (!NSWorkspace.sharedWorkspace.accessibilityDisplayShouldReduceMotion) {
+        CABasicAnimation *rise = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
+        rise.fromValue = @(-4); rise.toValue = @6; rise.duration = .78;
+        rise.autoreverses = YES; rise.repeatCount = HUGE_VALF;
+        rise.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        [logo.layer addAnimation:rise forKey:@"balloon-rise"];
+    }
+    NSTextField *label = [NSTextField labelWithString:@"BalloonPredictor"];
+    label.frame = NSMakeRect(0,60,304,30);
+    label.font = [NSFont boldSystemFontOfSize:23];
+    label.textColor = [NSColor colorWithRed:.125 green:.23 blue:.195 alpha:1];
+    label.alignment = NSTextAlignmentCenter;
+    [card addSubview:label];
+    NSTextField *caption = [NSTextField labelWithString:@"ATMOSPHERIC FLIGHT LAB"];
+    caption.frame = NSMakeRect(0,34,304,17);
+    caption.font = [NSFont systemFontOfSize:11 weight:NSFontWeightSemibold];
+    caption.textColor = [NSColor colorWithRed:.54 green:.37 blue:.30 alpha:1];
+    caption.alignment = NSTextAlignmentCenter;
+    [card addSubview:caption];
+    [self.splash center];
+    [self.splash orderFront:nil];
+    self.splashStart = NSProcessInfo.processInfo.systemUptime;
 }
 
 - (void)applicationDidFinishLaunching:(NSNotification *)notification {
@@ -117,17 +165,8 @@ static NSString *const nativeArch = @"x86_64";
     self.window.title = @"BalloonPredictor";
     self.window.minSize = NSMakeSize(760, 570);
     self.window.releasedWhenClosed = NO;
-    NSView *startup = [NSView new];
-    NSTextField *label = [NSTextField labelWithString:@"Starting BalloonPredictor…"];
-    label.translatesAutoresizingMaskIntoConstraints = NO;
-    [startup addSubview:label];
-    [NSLayoutConstraint activateConstraints:@[
-        [label.centerXAnchor constraintEqualToAnchor:startup.centerXAnchor],
-        [label.centerYAnchor constraintEqualToAnchor:startup.centerYAnchor]
-    ]];
-    self.window.contentView = startup;
     [self.window center];
-    [self.window makeKeyAndOrderFront:nil];
+    [self showSplash];
     [NSApp activate];
 
     NSURL *resources = NSBundle.mainBundle.resourceURL;
@@ -171,6 +210,7 @@ static NSString *const nativeArch = @"x86_64";
         if (NSProcessInfo.processInfo.systemUptime > deadline) [self fail:@"The local engine did not finish starting."];
         return;
     }
+    if (NSProcessInfo.processInfo.systemUptime - self.splashStart < 2.0) return;
     [timer invalidate];
     id parsed = [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL];
     if (![parsed isKindOfClass:NSDictionary.class]) {
@@ -194,7 +234,10 @@ static NSString *const nativeArch = @"x86_64";
     self.web.navigationDelegate = self;
     self.web.UIDelegate = self;
     self.window.contentView = self.web;
-    [self.web loadRequest:[NSURLRequest requestWithURL:self.origin]];
+    [self.window makeKeyAndOrderFront:nil];
+    [self.splash orderOut:nil];
+    self.splash = nil;
+    [self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[self.origin.absoluteString stringByAppendingString:@"?splash=done"]]]];
     if (self.testRoot) {
         __weak BalloonApp *weakSelf = self;
         self.testTimer = [NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *poll) {

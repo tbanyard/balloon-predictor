@@ -23,9 +23,14 @@ for ((i=0;i<100;i++)); do
     sleep .2
 done
 fingerprint=$(python -c 'import json,sys;print(json.load(open(sys.argv[1]))["fingerprint"])' "$work/ssh.json")
-adb install -r "$dist/BalloonPredictor-1.5.0-Android.apk"
+python scripts/offline-test-fixture.py "$work/offline.bpforecast"
+fixture=$(base64 < "$work/offline.bpforecast" | tr -d '\n')
+shopt -s nullglob
+apks=("$dist"/BalloonPredictor-*-Android.apk)
+[[ ${#apks[@]} -eq 1 ]]
+adb install -r "${apks[0]}"
 adb install -r "$tests/BalloonPredictor-instrumentation.apk"
-adb shell am instrument -w -e ssh_port "$ssh" -e web_port "$web" -e fingerprint "$fingerprint" \
+adb shell am instrument -w -e ssh_port "$ssh" -e web_port "$web" -e fingerprint "$fingerprint" -e offline_fixture "$fixture" \
   io.github.tbanyard.balloonpredictor.test/io.github.tbanyard.balloonpredictor.FlightTest | tee "$work/report"
 if ! grep -q 'BP_ANDROID_PASS:' "$work/report"; then
     cat "$work/server.log" "$work/ssh.log"

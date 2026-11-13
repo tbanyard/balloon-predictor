@@ -151,13 +151,18 @@ def open_window(url, root, verify=False):
     webview.settings["ALLOW_DOWNLOADS"] = True
     webview.settings["ALLOW_FILE_URLS"] = False
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
+    splash = webview.create_window(
+        "Starting BalloonPredictor", url + "splash.html", width=330, height=300,
+        frameless=True, transparent=True, easy_drag=False, resizable=False, on_top=True,
+    )
+    chooser_url = url + "?splash=done"
     window = webview.create_window(
-        "BalloonPredictor", url, width=1280, height=850, min_size=(760, 570),
+        "BalloonPredictor", chooser_url, width=1280, height=850, min_size=(760, 570), hidden=True,
+        menu=[Menu("Connection", [MenuAction("Choose server…", lambda: window.load_url(chooser_url))])],
     )
     from webview.menu import Menu, MenuAction
 
     checked = []
-    menu = [Menu("Connection", [MenuAction("Choose server…", lambda: window.load_url(url))])]
 
     def verify_frontend():
         try:
@@ -187,9 +192,20 @@ def open_window(url, root, verify=False):
         finally:
             window.destroy()
 
+    def start_window():
+        # The two seconds start when the splash document is ready.
+        splash.events.loaded.wait(15)
+        time.sleep(2)
+        try:
+            window.show()
+        finally:
+            splash.destroy()
+        if verify:
+            verify_frontend()
+
     webview.start(
-        verify_frontend if verify else None, gui="edgechromium",
-        private_mode=False, storage_path=str(root / "webview"), menu=menu,
+        start_window, gui="edgechromium",
+        private_mode=False, storage_path=str(root / "webview"),
         icon=str(ROOT / "windows" / "BalloonPredictor.ico"),
     )
     if verify and not checked:

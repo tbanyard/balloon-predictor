@@ -22,6 +22,6 @@ if ($env:CONDA_PREFIX -or $env:VIRTUAL_ENV) {
         New-Item $Ready -ItemType File -Force | Out-Null
     }
 }
-Write-Host "BalloonPredictor v1.5 · default http://127.0.0.1:8001 · Ctrl+C to stop."
+Write-Host "BalloonPredictor v1.5.1 · default http://127.0.0.1:8001 · Ctrl+C to stop."
 & $PredictorPython "$PSScriptRoot\server.py" @args
 exit $LASTEXITCODE

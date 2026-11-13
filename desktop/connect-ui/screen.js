@@ -67,4 +67,9 @@ async function poll(){
   setTimeout(poll,250);
 }
 mode();poll();
-setTimeout(()=>{$("splash").classList.add("leaving");setTimeout(()=>$("splash").remove(),270);},780);
+const splash=$("splash");
+if(new URLSearchParams(location.search).get("splash")==="done"||sessionStorage.getItem("bp-splash-seen"))splash.remove();
+else requestAnimationFrame(()=>setTimeout(()=>{
+  sessionStorage.setItem("bp-splash-seen","1");
+  splash.classList.add("leaving");setTimeout(()=>splash.remove(),270);
+},2000));

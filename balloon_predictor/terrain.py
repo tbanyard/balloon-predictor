@@ -5,7 +5,12 @@ import uuid
 import threading
 from collections import OrderedDict
 
-from .errors import CoverageError, PredictorError
+from .errors import MissingTerrainError, PredictorError
+
+
+def glo30_tile(latitude, longitude):
+    y, x = math.floor(latitude), math.floor((longitude + 180) % 360 - 180)
+    return f"Copernicus_DSM_COG_10_{'N' if y >= 0 else 'S'}{abs(y):02d}_00_{'E' if x >= 0 else 'W'}{abs(x):03d}_00_DEM"
 
 
 class TerrainCatalog:
@@ -73,15 +78,15 @@ class TerrainCatalog:
                     resolution = max(metres(1), metres(2))
                     candidates.append((resolution, float(val), path.name))
         if not candidates:
-            raise CoverageError("No valid physical DEM pixel here. Add a covering GeoTIFF tile, or choose a known launch/fixed landing elevation. Missing tiles are never assumed to be ocean.")
+            name = glo30_tile(lat, lon) + ".tif"
+            raise MissingTerrainError(lat, lon, name, tile == "auto" and not (self.root / name).is_file())
         _, value, name = min(candidates)
         return value, name
 
     def download(self, latitude, longitude, progress):
         """Fetch one 1-degree public GLO-30 tile; no global DEM download."""
         import requests
-        y, x = math.floor(latitude), math.floor((longitude + 180) % 360 - 180)
-        name = f"Copernicus_DSM_COG_10_{'N' if y >= 0 else 'S'}{abs(y):02d}_00_{'E' if x >= 0 else 'W'}{abs(x):03d}_00_DEM"
+        name = glo30_tile(latitude, longitude)
         target = self.root / (name + ".tif")
         if target.exists():
             return {"tile": target.name, "path": str(target), "cached": True}
@@ -90,7 +95,7 @@ class TerrainCatalog:
         try:
             with requests.get(url, stream=True, timeout=(20, 120)) as response:
                 if response.status_code == 404:
-                    raise PredictorError("No public GLO-30 tile at this location. Ocean tiles and some restricted land tiles are absent; use a local DEM or known elevation.")
+                    raise MissingTerrainError(latitude, longitude, target.name, False, no_public_tile=True)
                 response.raise_for_status()
                 count = 0
                 with temporary.open("wb") as output:

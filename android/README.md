@@ -12,3 +12,6 @@ the `BP_APK_STORE_PASS` and `BP_APK_KEY_PASS` environment variables. GitHub
 uses the encrypted `BP_ANDROID_KEYSTORE`, `BP_ANDROID_STORE_PASSWORD`, and
 `BP_ANDROID_KEY_PASSWORD` secrets. The emulator test uses real SSH against a
 localhost fixture and checks that Server settings preserve the calculated flight.
+
+See [Android offline flights](../docs/V1.5.1.md#android-without-a-connection)
+for preparing and opening a regional forecast pack before a launch.

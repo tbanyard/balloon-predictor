@@ -81,7 +81,8 @@ class Chooser:
     def __enter__(self):
         chooser = self
         assets = {"": ("index.html", "text/html"), "screen.css": ("screen.css", "text/css"),
-                  "screen.js": ("screen.js", "text/javascript"), "balloon.svg": ("balloon.svg", "image/svg+xml")}
+                  "screen.js": ("screen.js", "text/javascript"), "balloon.svg": ("balloon.svg", "image/svg+xml"),
+                  "splash.html": ("splash.html", "text/html")}
 
         class Handler(BaseHTTPRequestHandler):
             def log_message(self, *_):
@@ -106,7 +107,7 @@ class Chooser:
             def do_GET(self):
                 if not self.local():
                     return self.reply(404, {})
-                name = self.path[len(chooser.token):]
+                name = urlsplit(self.path).path[len(chooser.token):]
                 if name == "state":
                     with chooser.lock:
                         result = {**chooser.state, "resume": chooser.session, "prefs": chooser.prefs}

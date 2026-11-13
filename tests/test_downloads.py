@@ -15,14 +15,24 @@ from conftest import make_grib
 def test_cds_request_schema_cache_and_release_check(tmp_path,monkeypatch):
     raw=tmp_path/"source.grib";make_grib(raw,version=5)
     calls=[]
+    updates=[]
     class FakeClient:
-        def __init__(self,**kwargs):pass
+        def __init__(self,**kwargs):
+            self.info=kwargs["info_callback"]
         def retrieve(self,dataset,selection,target):
-            calls.append((dataset,selection));shutil.copyfile(raw,target)
+            calls.append((dataset,selection))
+            for state in ("accepted","running","successful"):
+                self.info(f"status has been updated to {state}")
+            self.info("Untrusted provider message with a request URL")
+            shutil.copyfile(raw,target)
     monkeypatch.setitem(sys.modules,"cdsapi",types.SimpleNamespace(Client=FakeClient))
     settings=Settings(tmp_path/"data")
     request=DownloadRequest(source="era5t",name="recent",start="2024-01-15T12:15:00Z",end="2024-01-15T17:45:00Z",area=[55,-6,51,-2])
-    ds=download_weather(request,settings)
+    ds=download_weather(request,settings,updates.append)
+    assert any("waiting in their queue" in status for status in updates)
+    assert any("CDS is preparing" in status for status in updates)
+    assert any("downloading to this server" in status for status in updates)
+    assert not any("Untrusted provider message" in status for status in updates)
     assert len(calls)==2
     assert calls[0][1]["time"]==[f"{hour}:00" for hour in range(12,19)]
     assert calls[0][1]["data_format"]=="grib"

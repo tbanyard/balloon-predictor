@@ -22,7 +22,7 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
  w.SVGSVGElement.prototype.createSVGRect=()=>({});w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};w.matchMedia=()=>({matches:false});
  Object.defineProperty(w.HTMLElement.prototype,'clientWidth',{get(){return ['map','window-area'].includes(this.id)?1000:400;}});Object.defineProperty(w.HTMLElement.prototype,'clientHeight',{get(){return this.id==='window-area'?800:600;}});
  w.eval(fs.readFileSync(path.join(root,'frontend/vendor/leaflet/leaflet.js'),'utf8'));const mapFactory=w.L.map;w.L.map=(id,o)=>mapFactory(id,{...o,preferCanvas:false});
- for(const file of ['plots.js','ui.js','windows.js','app.js'])w.eval(fs.readFileSync(path.join(root,'frontend',file),'utf8'));
+ for(const file of ['plots.js','ui.js','windows.js','sensitivity.js','trajectory-tools.js','app.js'])w.eval(fs.readFileSync(path.join(root,'frontend',file),'utf8'));
  for(let i=0;i<100&&!$('flight-tabs').children.length;i++)await delay(20);assert.ok($('flight-tabs').children.length);
  $('dataset').value='test-model';$('dataset').onchange();$('launch_datetime').value='2024-01-15T12:00:00';$('launch_latitude').value='53';$('launch_longitude').value='-4';$('burst_altitude').value='1000';$('flight_mode').value='ascent';$('landing_mode').value='fixed';$('landing_altitude').value='3000';$('flight_mode').onchange();
  assert.ok($('landing_mode').disabled&&$('landing_altitude').disabled);

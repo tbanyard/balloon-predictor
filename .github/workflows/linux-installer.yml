@@ -1,7 +1,7 @@
 name: Debian installer (test)
 on:
   push:
-    branches: [release-v1.5-test]
+    branches: [release-v1.5.1-test]
   workflow_dispatch:
 permissions:
   contents: read

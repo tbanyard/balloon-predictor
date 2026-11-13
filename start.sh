@@ -30,5 +30,5 @@ else
     touch "$predictor_venv/.balloon-predictor-1.4-ready"
   fi
 fi
-echo 'BalloonPredictor v1.5 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
+echo 'BalloonPredictor v1.5.1 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
 exec "$predictor_python" "$predictor_project/server.py" "$@"

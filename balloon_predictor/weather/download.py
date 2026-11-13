@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 
 from filelock import FileLock
 import numpy as np
@@ -30,12 +31,14 @@ def hourly_window(start, end):
     return first, last
 
 
-def cached_retrieve(cache_dir, signature, retrieve, refresh=False):
+def cached_retrieve(cache_dir, signature, retrieve, refresh=False, on_cached=None):
     digest = hashlib.sha256(json.dumps(signature, sort_keys=True).encode()).hexdigest()
     path = Path(cache_dir) / (digest + ".grib")
     path.parent.mkdir(parents=True, exist_ok=True)
     with FileLock(str(path) + ".lock", timeout=3600):
         if path.exists() and path.stat().st_size > 0 and not refresh:
+            if on_cached:
+                on_cached()
             return path
         part = path.with_suffix(".part")
         try:
@@ -47,6 +50,27 @@ def cached_retrieve(cache_dir, signature, retrieve, refresh=False):
         finally:
             part.unlink(missing_ok=True)
     return path
+
+
+_CDS_STATES = {
+    "accepted": "Accepted by CDS · waiting in their queue",
+    "queued": "Queued at CDS",
+    "running": "CDS is preparing the data",
+    "successful": "CDS finished preparing the data · downloading to this server",
+    "completed": "CDS finished preparing the data · downloading to this server",
+    "failed": "CDS reported a failed request",
+    "rejected": "CDS rejected the request",
+}
+
+
+def cds_status(message, args=()):
+    """Recognise known CDS states; do not forward URLs or raw provider text."""
+    try:
+        line = str(message) % args if args else str(message)
+    except (TypeError, ValueError):
+        return None
+    match = re.fullmatch(r"(?:status has been updated to|request is) ([a-z]+)\.?", line.strip(), re.IGNORECASE)
+    return _CDS_STATES.get(match[1].lower()) if match else None
 
 
 def download_era5(request, settings, progress):
@@ -61,7 +85,15 @@ def download_era5(request, settings, progress):
     except ImportError as exc:
         raise PredictorError("Install CDS support: pip install -e '.[weather]'.") from exc
     key = os.environ.get("CDSAPI_KEY") or os.environ.get("CDS_API_KEY")
-    kwargs = {"quiet": True, "progress": False, "timeout": 60, "retry_max": 3, "sleep_max": 10}
+    stage = ""
+
+    def info_callback(message, *args, **_):
+        state = cds_status(message, args)
+        if state and stage:
+            progress(f"{stage}: {state}")
+
+    kwargs = {"quiet": True, "progress": False, "timeout": 60, "retry_max": 3, "sleep_max": 10,
+              "info_callback": info_callback}
     if key:
         kwargs.update(key=key, url=os.environ.get("CDSAPI_URL", "https://cds.climate.copernicus.eu/api"))
     try:
@@ -85,13 +117,18 @@ def download_era5(request, settings, progress):
             jobs.append(("reanalysis-era5-single-levels", {**common, "variable": [
                 "10m_u_component_of_wind", "10m_v_component_of_wind", "2m_temperature", "2m_dewpoint_temperature", "surface_pressure", "geopotential"]}))
         for dataset, selection in jobs:
-            progress(f"Retrieving {day} · {dataset}. CDS may queue this request; predictions reuse the local cache.")
+            level_type = "pressure levels" if "pressure-levels" in dataset else "surface fields"
+            stage = f"{day} · {level_type}"
+
             def retrieve(target, dataset=dataset, selection=selection):
                 try:
+                    progress(f"{stage}: submitting to CDS")
                     client.retrieve(dataset, selection, str(target))
+                    progress(f"{stage}: downloaded to this server")
                 except Exception as exc:
                     raise PredictorError("CDS retrieval failed. Check dataset terms, credentials, dates and CDS service status. See the server log for the exception type.") from exc
-            files.append(cached_retrieve(settings.data_dir / "cache", {"dataset": dataset, "request": selection}, retrieve, request.refresh))
+            files.append(cached_retrieve(settings.data_dir / "cache", {"dataset": dataset, "request": selection},
+                                         retrieve, request.refresh, lambda: progress(f"{stage}: using the cached file")))
     progress("Converting ERA5 GRIB into the local weather dataset")
     ds = read_grib(files, area=request.area, attrs={"source": request.source,
                    "label": f"{request.name} · {'ERA5' if request.source == 'era5' else 'ERA5 / ERA5T'}"})

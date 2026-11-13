@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.5.1
+
+- One-line Trajectory toolbar with compact, endpoint-aware switches and overflow.
+- Fixed geographic sensitivity region around the nominal and sensitivity endpoints.
+- Missing DEM tile location, verified download and a retry from Flight Setup.
+- Round elapsed-time chart ticks and live CDS preparation stages.
+- Two-second app splash screens and Android offline single-flight calculation from a saved regional forecast.
+
 ## 1.5.0
 
 - Local, web and SSH desktop connection modes, animated startup, and Debian package.

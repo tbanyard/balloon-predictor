@@ -26,6 +26,6 @@
   window.BalloonUI={predictionBusy(busy){
     document.getElementById("workspace").classList.toggle("prediction-busy",busy);
     document.getElementById("flight-form").setAttribute("aria-busy",String(busy));
-    for(const node of document.querySelectorAll("[data-balloon-loader]"))node.hidden=!busy;
+    for(const node of document.querySelectorAll("[data-balloon-loader=flight]"))node.hidden=!busy;
   }};
 })();

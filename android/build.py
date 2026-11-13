@@ -71,6 +71,9 @@ def build(args, work):
     elif not env.get("BP_APK_STORE_PASS") or not env.get("BP_APK_KEY_PASS"):
         raise RuntimeError("Set BP_APK_STORE_PASS and BP_APK_KEY_PASS for release signing.")
     jars, assets = libraries(work)
+    shutil.copytree(HERE / "offline", assets / "offline")
+    shutil.copytree(ROOT / "frontend/vendor/leaflet", assets / "offline-assets/vendor/leaflet")
+    shutil.copy2(ROOT / "frontend/coastlines.js", assets / "offline-assets/coastlines.js")
 
     def apk(folder, base, output, sources, dependencies=(), classpath=()):
         classes, dex = folder / "classes", folder / "dex"

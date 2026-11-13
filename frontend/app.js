@@ -3,6 +3,7 @@ const $ = id => document.getElementById(id);
 const STORAGE_KEY = "balloon-predictor-v1.1-setups";
 const numericFields = ["launch_latitude","launch_longitude","launch_altitude","ascent_rate","descent_rate","burst_altitude","landing_altitude","time_step","max_duration_hours","ensemble_members","ascent_sigma","descent_sigma","burst_sigma","wind_sigma","seed"];
 const setupFields = ["dataset","launch_datetime","flight_name","flight_mode","descent_model","landing_mode","use_vertical_wind","ground_source","ground_altitude","below_model_policy",...numericFields,"run_mode","series_duration","series_interval","series_sites","arrival_datetime","arrival_altitude","arrival_rates","arrival_rates_mode","arrival_sites"];
+let demRecovery=null,preferredTrack="both",preferredEndpoint="landing";
 let datasets=[], sites=[], activeId=null, result=null, jobId=null, hoverMarker=null, toastTimer, running=false, soundingToken=0;
 const palette=["#28645a","#bd6a29","#7056a0","#3187a1","#a65475","#747d35"];
 const map=L.map("map",{zoomControl:false,preferCanvas:true}).setView([52.817208,-4.125],7);
@@ -27,10 +28,10 @@ function utcText(value){return new Date(value).toISOString().replace("T"," ").re
 async function api(path,options){
   const response=await fetch(path,options); let data;
   try{data=await response.json();}catch{throw new Error("Server returned an unreadable response.");}
-  if(!response.ok){const d=data.detail;throw new Error(Array.isArray(d)?d.map(e=>e.loc.slice(1).join(".")+": "+e.msg).join("; "):d||"Request failed.");}
+  if(!response.ok){const d=data.detail;throw Object.assign(new Error(Array.isArray(d)?d.map(e=>e.loc.slice(1).join(".")+": "+e.msg).join("; "):d||"Request failed."),{details:data.error_details});}
   return data;
 }
-async function poll(id,update){for(;;){const job=await api("/api/jobs/"+id);update(job.message,job.status);if(job.status==="failed")throw new Error(job.error);if(job.status==="completed")return job.result;await new Promise(resolve=>setTimeout(resolve,500));}}
+async function poll(id,update){for(;;){const job=await api("/api/jobs/"+id);update(job.message,job.status);if(job.status==="failed")throw Object.assign(new Error(job.error),{details:job.error_details});if(job.status==="completed")return job.result;await new Promise(resolve=>setTimeout(resolve,500));}}
 function activeSite(){return sites.find(s=>s.id===activeId);}
 function readSetup(){return Object.fromEntries(setupFields.map(key=>[key,$(key).type==="checkbox"?$(key).checked:$(key).value]));}
 function writeSetup(setup){for(const key of setupFields)if(setup[key]!==undefined){if($(key).type==="checkbox")$(key).checked=Boolean(setup[key]);else $(key).value=setup[key];}}
@@ -44,8 +45,9 @@ function renderTabs(){
   for(const site of sites){const tab=document.createElement("button");tab.type="button";tab.className="flight-tab";tab.setAttribute("role","tab");tab.setAttribute("aria-selected",String(site.id===activeId));tab.textContent=site.setup.flight_name||"Launch point";tab.onclick=()=>switchSite(site.id);$("flight-tabs").append(tab);}
   $("remove-flight").disabled=sites.length<=1;
 }
-function switchSite(id){saveCurrent();activeId=id;const site=activeSite();writeSetup(site.setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();status("flight-status",site.series?"Series loaded · "+siteEntries(site).length+" launches":site.result?"Saved flight loaded.":"Ready to calculate this launch point.");}
+function switchSite(id){setDemRecovery(null);saveCurrent();activeId=id;const site=activeSite();writeSetup(site.setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();status("flight-status",site.series?"Series loaded · "+siteEntries(site).length+" launches":site.result?"Saved flight loaded.":"Ready to calculate this launch point.");}
 function invalidatePrediction(){
+  setDemRecovery(null);
   const site=activeSite();if(!site)return;
   site.revision++;site.result=null;site.series=null;site.jobId=null;site.setup=readSetup();
   renderTabs();drawSelected();drawAllMap();persist();status("flight-status","Setup changed. Calculate to update this launch point.");
@@ -73,7 +75,11 @@ function updateFields(){
   $("landing_mode").disabled=ascent;$("landing_altitude").disabled=ascent;
   for(const id of ["descent-model-field","descent-rate-field","landing-surface-field","landing-field"])$(id).classList.toggle("is-inactive",ascent);
   $("landing-surface-note").textContent=ascent?"Not used for ascent-only flights or coordinated arrivals.":"Landing terrain is independent of launch ground. Use a DEM for realistic landings near coarse model coastlines.";
-  if(ascent)$("endpoint-focus").value="burst";
+  const track=$("track-display"),endpoint=$("endpoint-focus"),left=endpoint.querySelector("[data-left]");
+  left.setAttribute("aria-label",ascent?"Target position":"Burst position");
+  for(const icon of left.querySelectorAll("svg"))icon.toggleAttribute("hidden",icon.hasAttribute("data-target")!==ascent);
+  track.set(ascent?"ascent":preferredTrack,ascent);
+  endpoint.set(ascent?"burst":preferredEndpoint,ascent);
   $("schedule-fields").hidden=$("run_mode").value!=="series";
   const arrival=$("run_mode").value==="arrival";
   $("arrival-fields").hidden=!arrival;$("arrival_datetime").required=arrival;
@@ -169,8 +175,40 @@ function arrivalRates(){
   if(!rates.length||rates.length>20||rates.some(v=>!Number.isFinite(v)||v<=0||v>30))throw new Error("Enter 1–20 ascent rates greater than zero and at most 30 m/s, separated by commas.");
   return rates;
 }
+function setDemRecovery(details,selected=activeId){
+  demRecovery=details?.code==="missing_dem"&&details.downloadable?{details,selected}:null;
+  $("flight-dem-action").hidden=$("mobile-dem-download").hidden=!demRecovery;
+  if(!demRecovery)return;
+  const label=details.phase==="launch"?"Download launch DEM and retry":"Download required descent DEM and retry";
+  for(const id of ["flight-dem-download","mobile-dem-download"]){$(id).textContent=label;$(id).title=details.tile;}
+}
+function terrainJob(details){
+  return api("/api/terrain/download",{method:"POST",headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({latitude:details.latitude,longitude:details.longitude,verify_pixel:true})});
+}
+async function recoverDem(){
+  const recovery=demRecovery;
+  if(!recovery||running||activeId!==recovery.selected)return;
+  for(const id of ["flight-dem-download","mobile-dem-download"])$(id).disabled=true;
+  try{
+    status("flight-status","Fetching the required DEM tile…","working");
+    const job=await terrainJob(recovery.details);
+    await poll(job.id,message=>{if(demRecovery===recovery)status("flight-status",message,"working");});
+    if(demRecovery!==recovery||activeId!==recovery.selected)return;
+    setDemRecovery(null);
+    status("flight-status","DEM tile saved. Retrying the flight…","working");
+    $("flight-form").requestSubmit();
+  }catch(error){
+    if(demRecovery!==recovery)return;
+    status("flight-status",error.message,"error");
+    if(error.details?.code==="missing_dem"&&!error.details.downloadable)setDemRecovery(null);
+  }finally{
+    for(const id of ["flight-dem-download","mobile-dem-download"])$(id).disabled=false;
+  }
+}
+$("flight-dem-download").onclick=$("mobile-dem-download").onclick=recoverDem;
 $("flight-form").onsubmit=async e=>{
-  e.preventDefault();if(running)return;saveCurrent();
+  e.preventDefault();if(running)return;setDemRecovery(null);saveCurrent();
   const mode=$("run_mode").value,isSeries=mode!=="single",isArrival=mode==="arrival";
   const all=isArrival?$("arrival_sites").value==="all":isSeries&&$("series_sites").value==="all";
   const chosen=all?[...sites]:[activeSite()],revisions=chosen.map(site=>site.revision);
@@ -185,15 +223,23 @@ $("flight-form").onsubmit=async e=>{
     const job=await api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const completed=await poll(job.id,message=>status("flight-status",message,"working"));let accepted=0;
     chosen.forEach((site,i)=>{if(!sites.includes(site)||site.revision!==revisions[i])return;site.jobId=job.id;if(isSeries){site.series=completed;site.batchSiteIndex=i;site.selectedIndex=completed.flights.find(x=>x.site_index===i&&x.status==="completed")?.index??-1;site.result=null;}else{site.result=completed;site.series=null;}accepted++;});
-    if(isArrival)$("endpoint-focus").value="burst";
+    if(isArrival)$("endpoint-focus").set("burst",true);
     drawSelected();drawAllMap();fitFlight();
     if(accepted&&window.BalloonWindows)window.BalloonWindows.show("profile-panel");
     status("flight-status",!accepted?"Setup changed during calculation. Calculate again.":isSeries?completed.completed+" of "+completed.total+" balloons completed"+(completed.failed?" · "+completed.failed+" unavailable; see launch list.":""):"Flight complete · "+completed.weather.label);
-  }catch(error){status("flight-status",error.message,"error");}finally{running=false;window.BalloonUI?.predictionBusy(false);$("predict-button").disabled=$("dataset").value.startsWith("online-");}
+    const failure=isSeries&&completed.flights.find(entry=>entry.error_details?.code==="missing_dem");
+    if(accepted&&failure){
+      status("flight-status",$("flight-status").textContent+" "+failure.error,"error");
+      setDemRecovery(failure.error_details);
+    }
+  }catch(error){
+    status("flight-status",error.message,"error");
+    if(chosen.includes(activeSite())&&chosen.every((site,i)=>site.revision===revisions[i]))setDemRecovery(error.details);
+  }finally{running=false;window.BalloonUI?.predictionBusy(false);$("predict-button").disabled=$("dataset").value.startsWith("online-");}
 };
 function unwrapped(points){let previous=null;return points.map(p=>{let lon=p.longitude;if(previous!==null)lon=previous+((lon-previous+540)%360-180);previous=lon;return[p.latitude,lon];});}
 function allFlights(){return sites.flatMap((site,si)=>site.series?siteEntries(site).filter(e=>e.status==="completed").map(e=>({site,si,index:e.index,result:e.result})):site.result?[{site,si,index:0,result:site.result}]:[]);}
-function endpoint(data){return $("endpoint-focus").value==="burst"||!data.summary.landing?data.summary.burst:data.summary.landing;}
+function endpoint(data){return preferredEndpoint==="burst"||!data.summary.landing?data.summary.burst:data.summary.landing;}
 function drawAllMap(){
   flightLayer.clearLayers();siteLayer.clearLayers();
   const coordinated=new Map();
@@ -203,31 +249,26 @@ function drawAllMap(){
   for(const site of sites)if(site.id!==activeId){const marker=L.circleMarker([Number(site.setup.launch_latitude),Number(site.setup.launch_longitude)],{radius:6,color:"#28645a",weight:2,fillOpacity:.5}).addTo(siteLayer);marker.bindTooltip(document.createTextNode(site.setup.flight_name));marker.on("click",e=>{L.DomEvent.stopPropagation(e.originalEvent||e);switchSite(site.id);});}
   for(const entry of allFlights()){
     const selected=entry.site.id===activeId&&(!entry.site.series||entry.index===entry.site.selectedIndex);const data=entry.result;const color=palette[(entry.si+entry.index)%palette.length];
-    for(const stage of data.prediction){if(stage.stage==="descent"&&$("track-display").value==="ascent")continue;const line=L.polyline(unwrapped(stage.trajectory),{color:selected?(stage.stage==="ascent"?"#d75b2c":"#337fba"):color,weight:selected?3.5:1.8,opacity:selected?.98:.5,dashArray:stage.stage==="descent"?"5,4":null}).addTo(flightLayer);line.bindTooltip(document.createTextNode(entry.site.setup.flight_name+" · "+utcText(data.summary.launch.datetime)));line.on("click",e=>{L.DomEvent.stopPropagation(e.originalEvent||e);switchSite(entry.site.id);entry.site.selectedIndex=entry.index;drawSelected();drawAllMap();});}
-    const p=endpoint(data);L.circleMarker([p.latitude,p.longitude],{radius:selected?6:3.5,color:selected?"white":color,weight:1.5,fillColor:selected?"#d75b2c":color,fillOpacity:.9}).addTo(flightLayer).bindTooltip(document.createTextNode((p===data.summary.burst?"Target / burst":"Landing")+" · "+Math.round(p.altitude).toLocaleString()+" m · "+utcText(p.datetime)));
+    for(const stage of data.prediction){if(stage.stage==="descent"&&preferredTrack==="ascent")continue;const line=L.polyline(unwrapped(stage.trajectory),{color:selected?(stage.stage==="ascent"?"#d75b2c":"#337fba"):color,weight:selected?3.5:1.8,opacity:selected?.98:.5,dashArray:stage.stage==="descent"?"5,4":null}).addTo(flightLayer);line.bindTooltip(document.createTextNode(entry.site.setup.flight_name+" · "+utcText(data.summary.launch.datetime)));line.on("click",e=>{L.DomEvent.stopPropagation(e.originalEvent||e);switchSite(entry.site.id);entry.site.selectedIndex=entry.index;drawSelected();drawAllMap();});}
+    const p=endpoint(data),longitude=BPSensitivity.longitudeNear(p.longitude,map.getCenter().lng);
+    L.circleMarker([p.latitude,longitude],{radius:selected?6:3.5,color:selected?"white":color,weight:1.5,fillColor:selected?"#d75b2c":color,fillOpacity:.9}).addTo(flightLayer).bindTooltip(document.createTextNode((p===data.summary.burst?(data.summary.landing?"Burst":"Target"):"Landing")+" · "+Math.round(p.altitude).toLocaleString()+" m · "+utcText(p.datetime)));
     const members=data.ensemble||[];
     if($("sensitivity-display").value==="region"&&members.length>=2){
       showRegion=true;
-      const zoom=map.getZoom(),reference=BPSensitivity.longitudeNear(p.longitude,map.getCenter().lng);
-      const points=members.map(member=>{
-        const q=endpoint(member),v=map.project([q.latitude,BPSensitivity.longitudeNear(q.longitude,reference)],zoom);
-        return [v.x,v.y];
-      });
-      const ring=BPSensitivity.roundedEnvelope(points,8).map(([x,y])=>map.unproject([x,y],zoom));
+      const ring=BPSensitivity.endpointRegion({...p,longitude},members.map(endpoint));
       L.polygon(ring,{color,weight:2,opacity:.24,fillOpacity:.21,smoothFactor:0,lineJoin:"round"}).addTo(flightLayer)
-        .bringToBack().bindTooltip("Sensitivity region · "+members.length+" members · sampled endpoints, not a probability");
+        .bringToBack().bindTooltip("Sensitivity region · nominal + "+members.length+" members · 1 km margin");
     }else{
       showDots||=members.length>0;
-      for(const member of members){const q=endpoint(member);L.circleMarker([q.latitude,q.longitude],{radius:2.8,color,weight:.8,fillOpacity:.4}).addTo(flightLayer).bindTooltip("Sensitivity member "+member.member);}
+      for(const member of members){const q=endpoint(member);L.circleMarker([q.latitude,BPSensitivity.longitudeNear(q.longitude,longitude)],{radius:2.8,color,weight:.8,fillOpacity:.4}).addTo(flightLayer).bindTooltip("Sensitivity member "+member.member);}
     }
   }
   $("region-legend").hidden=!showRegion;
   $("member-legend").hidden=!showDots;
 }
 $("sensitivity-display").onchange=drawAllMap;
-map.on("zoomend",()=>{if($("sensitivity-display").value==="region")drawAllMap();});
-function fitFlight(){const points=allFlights().flatMap(e=>e.result.prediction.filter(s=>$("track-display").value!=="ascent"||s.stage==="ascent").flatMap(s=>s.trajectory));if(points.length)map.fitBounds(L.latLngBounds(unwrapped(points)),{padding:[45,45],maxZoom:11});else map.setView(launchMarker.getLatLng(),8);}
-$("fit-button").onclick=fitFlight;$("track-display").onchange=()=>{drawAllMap();};$("endpoint-focus").onchange=()=>{drawSelected();drawAllMap();};
+function fitFlight(){const points=allFlights().flatMap(e=>e.result.prediction.filter(s=>preferredTrack!=="ascent"||s.stage==="ascent").flatMap(s=>s.trajectory));if(points.length)map.fitBounds(L.latLngBounds(unwrapped(points)),{padding:[45,45],maxZoom:11});else map.setView(launchMarker.getLatLng(),8);}
+$("fit-button").onclick=fitFlight;$("track-display").onchange=()=>{preferredTrack=$("track-display").value;drawAllMap();};$("endpoint-focus").onchange=()=>{preferredEndpoint=$("endpoint-focus").value;drawSelected();drawAllMap();};
 function drawSeries(site){
   $("series-launches").replaceChildren();$("series-summary").hidden=!site?.series;$("series-launches").hidden=!site?.series;
   if(!site?.series)return;const entries=siteEntries(site);$("series-summary").textContent=entries.filter(e=>e.status==="completed").length+" / "+entries.length+" launches available · select a launch below to inspect its profile.";
@@ -262,10 +303,14 @@ function drawArrivals(site){
 function drawSelected(){
   const site=activeSite();result=selectedResult(site);jobId=site?.jobId;drawSeries(site);drawArrivals(site);renderTabs();
   if(hoverMarker){map.removeLayer(hoverMarker);hoverMarker=null;}
+  const offline=$("offline-pack"),packKey=jobId?jobId+":"+(site.series?site.selectedIndex:0):"";
+  const packAvailable=result&&["era5","era5t","gfs","ifs"].includes(result.weather.source)&&result.weather.native!==true;
+  offline.disabled=!packAvailable||offline.dataset.working===packKey;
+  if(offline.dataset.flight!==packKey){offline.dataset.flight=packKey;$("offline-pack-status").replaceChildren();}
   $("exports").hidden=!jobId;$("flight-result").hidden=!result;$("empty-result").hidden=Boolean(result);$("sounding-open").disabled=!result?.sounding;$("restore-sounding").disabled=!result?.sounding;updateSondeLink();
   document.querySelectorAll("[data-format]").forEach(link=>{link.href="/api/predictions/"+jobId+"/export/"+link.dataset.format;link.setAttribute("download","");});
   if(!result){soundingToken++;$("sounding-panel").hidden=true;$("sounding-panel").classList.remove("open");$("altitude-chart").replaceChildren();return;}
-  const s=result.summary,p=endpoint(result);$("metric-endpoint-label").textContent=p===s.burst?"TARGET / BURST":"LANDING";
+  const s=result.summary,p=endpoint(result);$("metric-endpoint-label").textContent=p===s.burst?(s.landing?"BURST":"TARGET"):"LANDING";
   $("metric-landing").textContent=p.latitude.toFixed(4)+"°, "+p.longitude.toFixed(4)+"°";$("metric-landing-time").textContent=utcText(p.datetime);
   $("metric-duration").textContent=duration(s.duration_seconds);$("metric-stages").textContent=duration(s.ascent_seconds)+" up"+(s.landing?" / "+duration(s.descent_seconds)+" down":" · ascent only");
   $("metric-drift").textContent=(p===s.burst?s.burst_drift_km:s.drift_km).toFixed(1)+" km";$("metric-burst").textContent=(s.landing?"Burst":"Target")+" at "+Math.round(s.burst.altitude).toLocaleString()+" m AMSL";
@@ -280,14 +325,18 @@ function drawChart(data) {
   const svg = $("altitude-chart"); svg.replaceChildren();
   const left=54,right=883,top=12,bottom=119,total=data.summary.duration_seconds;
   const maxAlt = Math.max(data.summary.burst.altitude,100) * 1.05, minAlt = Math.min(data.summary.launch.altitude,(data.summary.landing?.altitude ?? data.summary.launch.altitude),0);
-  const x = seconds => left + seconds/total*(right-left);
+  const x = seconds => left + seconds/Math.max(total,1)*(right-left);
   const y = altitude => bottom - (altitude-minAlt)/(maxAlt-minAlt)*(bottom-top);
   for (let i=0;i<=3;i++) {
     const altitude = minAlt + (maxAlt-minAlt)*i/3;
     svg.append(svgElement("line",{x1:left,x2:right,y1:y(altitude),y2:y(altitude),class:"chart-grid"}));
     svg.append(svgElement("text",{x:left-9,y:y(altitude)+3,"text-anchor":"end",class:"chart-label"},(altitude/1000).toFixed(0)+" km"));
-    const time = total*i/3;
-    svg.append(svgElement("text",{x:x(time),y:141,"text-anchor":i===0?"start":i===3?"end":"middle",class:"chart-label"},Math.round(time/60)+" min"));
+  }
+  const ticks=BPSensitivity.elapsedTicks(total);
+  for(const time of ticks){
+    const at=x(time);
+    svg.append(svgElement("line",{x1:at,x2:at,y1:top,y2:bottom,class:"chart-grid"}));
+    svg.append(svgElement("text",{x:at,y:141,"text-anchor":time===0?"start":at>right-24?"end":"middle",class:"chart-label"},total<180?time+" s":time/60+" min"));
   }
   for (const stage of data.prediction) {
     const points = stage.trajectory.map(p=>x(p.elapsed_seconds).toFixed(2)+","+y(p.altitude).toFixed(2)).join(" ");
@@ -347,6 +396,7 @@ $("weather-form").onsubmit = async e => {
       area:["area-n","area-w","area-s","area-e"].map(id=>Number($(id).value)),grid:["ifs","gfs"].includes($("download-source").value)?.25:Number($("download-grid").value),
       surface:$("download-surface").checked,refresh:$("download-refresh").checked};
     if(["ifs","gfs"].includes(body.source)&&$("download-cycle").value)body.cycle=fromInput($("download-cycle").value);
+    $("weather-balloon").hidden=false;
     status("weather-status","Starting download…","working");
     const job=await api("/api/weather/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
     const info=await poll(job.id,message=>status("weather-status",message,"working"));
@@ -354,7 +404,7 @@ $("weather-form").onsubmit = async e => {
     status("weather-status","Added "+info.label+". It is now selected for predictions.");
     toast("Weather dataset ready.");
   } catch(error){status("weather-status",error.message,"error");}
-  finally{$("download-button").disabled=false;}
+  finally{$("download-button").disabled=false;$("weather-balloon").hidden=true;}
 };
 $("share-button").onclick=async()=>{
   const request=flightRequest(),url=new URL(location.href);url.search="";
@@ -377,7 +427,7 @@ $("sounding-open").onclick=()=>{if(window.BalloonWindows)window.BalloonWindows.s
   document.addEventListener("bp:layout",()=>requestAnimationFrame(()=>map.invalidateSize({pan:false})));
 $("sounding-close").onclick=()=>{soundingToken++;if(window.BalloonWindows)window.BalloonWindows.minimise("sounding-panel");else $("sounding-panel").hidden=true;};$("sounding-mode").onchange=refreshSounding;
 function downloadJSON(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.5",sites:sites.map(s=>({setup:s.setup}))});};
+$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.5.1",sites:sites.map(s=>({setup:s.setup}))});};
 $("import-session").onchange=async()=>{
   try{const file=$("import-session").files[0];if(!file)return;if(file.size>1000000)throw new Error("Setup file must be under 1 MB.");const value=JSON.parse(await file.text());if(!Array.isArray(value.sites)||!value.sites.length||value.sites.length>20)throw new Error("Setup file must contain 1–20 launch points.");const defaults=readSetup();const added=value.sites.map(item=>{if(!item.setup||typeof item.setup!=="object")throw new Error("Invalid launch setup.");const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];if(!Number.isFinite(Number(setup.launch_latitude))||Math.abs(Number(setup.launch_latitude))>85||!Number.isFinite(Number(setup.launch_longitude)))throw new Error("Invalid launch coordinates.");return newSite(setup);});sites=added;activeId=sites[0].id;writeSetup(sites[0].setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();toast("Launch setups loaded.");}catch(e){status("flight-status",e.message,"error");}finally{$("import-session").value="";}
 };
@@ -462,3 +512,21 @@ async function prepareExport(kind){
 }
 $("model-box-button").onclick=()=>prepareExport("model");
 $("sonde-netcdf").onclick=()=>prepareExport("sonde");
+
+$("offline-pack").onclick=async()=>{
+  const button=$("offline-pack"),output=$("offline-pack-status"),site=activeSite();
+  if(!site?.jobId||!selectedResult(site))return;
+  const prediction=site.jobId,index=site.series?site.selectedIndex:0, key=prediction+":"+index;
+  const current=()=>button.dataset.flight===key;
+  button.dataset.working=key;button.disabled=true;output.textContent="Preparing the regional forecast…";
+  try{
+    const job=await api("/api/predictions/"+prediction+"/offline-pack?flight_index="+index,{method:"POST"});
+    const data=await poll(job.id,text=>{if(current())output.textContent=text;});
+    if(!current())return;
+    const link=document.createElement("a");
+    link.href="/api/exports/"+job.id+"/download";link.download=data.filename;
+    link.textContent="Save "+data.filename+" ("+bytes(data.bytes)+") ↓";
+    output.replaceChildren(link);link.click();
+  }catch(error){if(current())output.textContent=error.message;}
+  finally{if(button.dataset.working===key)delete button.dataset.working;if(current())button.disabled=false;}
+};
