@@ -170,8 +170,14 @@ class App:
 
     def check_window(self):
         script = """(() => {
-            const connect=document.querySelector('#connect');
-            if(connect&&!window.__bpLocal){window.__bpLocal=true;connect.click();return false;}
+            const form=document.querySelector('#connection');
+            if(form){
+                if(!window.__bpLocal&&form.dataset.ready==='true'&&!document.querySelector('#connect').disabled){
+                    const mode=document.querySelector('#mode');mode.value='local';
+                    mode.dispatchEvent(new Event('change'));form.requestSubmit();window.__bpLocal=true;
+                }
+                return false;
+            }
             const button=document.querySelector('#predict-button');
             if(!window.L||button?.disabled!==false||document.querySelector('#dataset')?.value!=='demo')return false;
             if(!window.__bpFlight){

@@ -141,6 +141,7 @@ def serve(root, port):
 
 def open_window(url, root, verify=False):
     import webview
+    from webview.menu import Menu, MenuAction
 
     # The Inno installer provides this runtime if needed. Fail explicitly if
     # the renderer fell back to the legacy Internet Explorer engine.
@@ -151,16 +152,15 @@ def open_window(url, root, verify=False):
     webview.settings["ALLOW_DOWNLOADS"] = True
     webview.settings["ALLOW_FILE_URLS"] = False
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
-    splash = webview.create_window(
-        "Starting BalloonPredictor", url + "splash.html", width=330, height=300,
-        frameless=True, transparent=True, easy_drag=False, resizable=False, on_top=True,
-    )
     chooser_url = url + "?splash=done"
     window = webview.create_window(
         "BalloonPredictor", chooser_url, width=1280, height=850, min_size=(760, 570), hidden=True,
         menu=[Menu("Connection", [MenuAction("Choose server…", lambda: window.load_url(chooser_url))])],
     )
-    from webview.menu import Menu, MenuAction
+    splash = webview.create_window(
+        "Starting BalloonPredictor", url + "splash.html", width=330, height=300,
+        frameless=True, transparent=True, easy_drag=False, resizable=False, on_top=True,
+    )
 
     checked = []
 
@@ -169,24 +169,37 @@ def open_window(url, root, verify=False):
             if not window.events.loaded.wait(30):
                 raise RuntimeError("The Windows window did not finish loading.")
             deadline = time.monotonic() + 50
+            stage = "waiting for the connection screen"
             while time.monotonic() < deadline:
                 try:
-                    window.evaluate_js(
-                        "if (document.querySelector('#connect') && !window.__bpLocal) {"
-                        "window.__bpLocal = true; document.querySelector('#connect').click(); }"
+                    state = window.evaluate_js(
+                        "(() => { const form = document.querySelector('#connection');"
+                        "if (form) {"
+                        "  const status = document.querySelector('#status.error');"
+                        "  if (status?.textContent) return 'error: ' + status.textContent;"
+                        "  if (!window.__bpLocal && form.dataset.ready === 'true' && !document.querySelector('#connect').disabled) {"
+                        "    const mode = document.querySelector('#mode'); mode.value = 'local';"
+                        "    mode.dispatchEvent(new Event('change')); form.requestSubmit(); window.__bpLocal = true;"
+                        "  }"
+                        "  return window.__bpLocal ? 'opening local mode' : 'waiting for the connection screen';"
+                        "}"
+                        "return window.L && document.querySelector('#dataset')?.value === 'demo' &&"
+                        " document.querySelector('#predict-button')?.disabled === false"
+                        " ? 'ready' : 'waiting for the flight controls'; })()"
                     )
                 except webview.errors.JavascriptException:
                     time.sleep(.2)
                     continue
-                if window.evaluate_js(
-                    "Boolean(window.L && document.querySelector('#dataset')?.value === 'demo' && "
-                    "document.querySelector('#predict-button')?.disabled === false)"
-                ):
+                if state == "ready":
                     checked.append(True)
                     LOG.info("Windows WebView2 rendered the UI with Demo weather selected.")
                     return
+                if isinstance(state, str):
+                    if state.startswith("error: "):
+                        raise RuntimeError(state)
+                    stage = state
                 time.sleep(0.2)
-            raise RuntimeError("The Windows window did not initialise the flight controls.")
+            raise RuntimeError(f"The Windows window check timed out while {stage}.")
         except Exception:
             LOG.exception("Windows window check failed")
         finally:

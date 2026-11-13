@@ -28,8 +28,10 @@ static NSString *const nativeArch = @"x86_64";
 @property(nonatomic, strong) NSDictionary *engineReport;
 @property(nonatomic, strong) NSMapTable<WKDownload *, NSDictionary *> *downloads;
 @property(nonatomic) BOOL quitting;
-@property(nonatomic) BOOL testFlightLaunched;
+@property(nonatomic) BOOL testPageLoaded;
+@property(nonatomic) BOOL testProbePending;
 @property(nonatomic) BOOL testRequestedDownload;
+@property(nonatomic, copy) NSString *testStage;
 @end
 
 @implementation BalloonApp
@@ -237,44 +239,70 @@ static NSString *const nativeArch = @"x86_64";
     [self.window makeKeyAndOrderFront:nil];
     [self.splash orderOut:nil];
     self.splash = nil;
-    [self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[self.origin.absoluteString stringByAppendingString:@"?splash=done"]]]];
+    [self showConnection:nil];
     if (self.testRoot) {
         __weak BalloonApp *weakSelf = self;
+        self.testStage = @"loading the connection screen";
         self.testTimer = [NSTimer scheduledTimerWithTimeInterval:0.25 repeats:YES block:^(NSTimer *poll) {
             [weakSelf checkTestWindow];
         }];
         [NSTimer scheduledTimerWithTimeInterval:60 repeats:NO block:^(NSTimer *timeout) {
-            [weakSelf fail:@"The WebKit window or NetCDF download test timed out."];
+            [weakSelf fail:[NSString stringWithFormat:@"The WebKit test timed out while %@.", weakSelf.testStage]];
         }];
     }
 }
 
 - (void)checkTestWindow {
-    if (self.testRequestedDownload) return;
-    BOOL launched = self.testFlightLaunched;
-    NSString *script = launched ? @"document.querySelector('#flight-status')?.textContent || ''" :
-        @"(() => { const connect = document.querySelector('#connect');"
-        @"if (connect && !window.__bpLocal) { window.__bpLocal = true; connect.click(); return false; }"
+    if (!self.testPageLoaded || self.testProbePending || self.testRequestedDownload) return;
+    NSString *script = @"(() => { const form = document.querySelector('#connection');"
+        @"if (form) {"
+        @"  const status = document.querySelector('#status.error');"
+        @"  if (status?.textContent) return 'error: ' + status.textContent;"
+        @"  if (!window.__bpLocal && form.dataset.ready === 'true' && !document.querySelector('#connect').disabled) {"
+        @"    const mode = document.querySelector('#mode'); mode.value = 'local';"
+        @"    mode.dispatchEvent(new Event('change')); form.requestSubmit(); window.__bpLocal = true;"
+        @"  }"
+        @"  return window.__bpLocal ? 'opening local mode' : 'waiting for the connection screen to be ready';"
+        @"}"
         @"const button = document.querySelector('#predict-button');"
-        @"if (!window.L || document.querySelector('#dataset')?.value !== 'demo' || button?.disabled !== false) return false;"
-        @"if (!window.__bpTestStarted) { window.__bpTestStarted = true;"
+        @"if (!window.__bpTestStarted) {"
+        @"if (!window.L || document.querySelector('#dataset')?.value !== 'demo' || button?.disabled !== false)"
+        @"  return 'waiting for the flight controls';"
         @"document.querySelector('#flight_mode').value = 'ascent';"
         @"document.querySelector('#burst_altitude').value = '1000';"
-        @"document.querySelector('#ascent_rate').value = '5'; button.click(); } return true; })()";
+        @"document.querySelector('#ascent_rate').value = '5'; button.click(); window.__bpTestStarted = true;"
+        @"}"
+        @"const status = document.querySelector('#flight-status')?.textContent || '';"
+        @"return status.startsWith('Flight complete') ? 'ready' : 'calculating the Demo flight'; })()";
+    self.testProbePending = YES;
     [self.web evaluateJavaScript:script completionHandler:^(id value, NSError *error) {
-        if (error || self.testRequestedDownload || self.testFlightLaunched != launched) return;
-        if (!launched) {
-            self.testFlightLaunched = [value isKindOfClass:NSNumber.class] && [value boolValue];
+        self.testProbePending = NO;
+        if (error || self.quitting || self.testRequestedDownload || ![value isKindOfClass:NSString.class]) return;
+        if ([value hasPrefix:@"error: "]) {
+            [self fail:[NSString stringWithFormat:@"The connection screen reported an error: %@", [value substringFromIndex:7]]];
             return;
         }
-        if (![value isKindOfClass:NSString.class] || ![value hasPrefix:@"Flight complete"]) return;
+        if (![value isEqualToString:@"ready"]) {
+            if (![value isEqualToString:self.testStage]) {
+                self.testStage = value;
+                NSLog(@"BalloonPredictor WebKit test: %@.", value);
+            }
+            return;
+        }
         NSString *path = self.engineReport[@"download"];
         if (![path isKindOfClass:NSString.class] || ![path hasPrefix:@"/api/exports/"] || ![path hasSuffix:@"/download"]) {
             [self fail:@"The runtime test did not provide a NetCDF export."];
             return;
         }
-        NSURL *url = [NSURL URLWithString:path relativeToURL:[self selectedOrigin]].absoluteURL;
+        NSURL *target = [self selectedOrigin];
+        NSURL *url = target ? [NSURL URLWithString:path relativeToURL:target].absoluteURL : nil;
+        if (![self isLocal:url]) {
+            [self fail:@"The runtime test did not provide a valid local NetCDF download URL."];
+            return;
+        }
         self.testRequestedDownload = YES;
+        self.testStage = @"saving the model box NetCDF";
+        NSLog(@"BalloonPredictor WebKit test: %@.", self.testStage);
         [self.testTimer invalidate];
         [self.web loadRequest:[NSURLRequest requestWithURL:url]];
     }];
@@ -346,6 +374,13 @@ static NSString *const nativeArch = @"x86_64";
 
 - (void)webView:(WKWebView *)webView navigationResponse:(WKNavigationResponse *)response didBecomeDownload:(WKDownload *)download {
     download.delegate = self;
+}
+
+- (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
+    if (!self.testRoot) return;
+    self.testPageLoaded = YES;
+    NSLog(@"BalloonPredictor WebKit test: %@ page loaded.",
+          [webView.URL.port isEqual:self.origin.port] ? @"connection" : @"flight");
 }
 
 - (void)webView:(WKWebView *)webView didFailProvisionalNavigation:(WKNavigation *)navigation withError:(NSError *)error {

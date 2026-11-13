@@ -215,6 +215,9 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     if(disclosure.querySelector(".disclosure-indicator").textContent!=="+")throw new Error("Collapsed disclosure does not show plus.");
     const icon=window.document.querySelector('link[rel="icon"]');
     if(!(await fetch(new URL(icon.href,base))).ok)throw new Error("Browser tab icon is missing.");
+    // The panel tests can start a fixed-column request just before JSDOM is
+    // closed. Await the latest sounding and invalidate any earlier requests.
+    await element("sounding-mode").onchange();
     if (errors.length) throw new Error(errors.join("\n"));
     process.stdout.write("Frontend DOM integration: PASS · numeric validation, flights, targets, tabs, series, coordinated arrivals, NetCDF, online GFS controls, window edges/maximise/split/toggle, mobile drawer, grid/time validation, storage paths, favicon, soundings and exports\n");
   } catch (error) {

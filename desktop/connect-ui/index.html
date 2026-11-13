@@ -7,7 +7,7 @@
 <label for="mode">Connection</label><select id="mode"><option value="local">Run locally</option><option value="web">Web server</option><option value="ssh">SSH tunnel</option></select>
 <div id="web" hidden><label for="address">Server address</label><input id="address" type="url" placeholder="https://server.example.org" spellcheck="false"><label class="check"><input id="allow-http" type="checkbox"> Allow HTTP on a trusted network or VPN</label></div>
 <div id="ssh" hidden><label for="host">SSH host</label><input id="host" placeholder="server.example.org" spellcheck="false"><label for="username">SSH username</label><input id="username" autocomplete="username" spellcheck="false"><div class="ports"><div><label for="ssh-port">SSH port</label><input id="ssh-port" type="number" min="1" max="65535" value="22"></div><div><label for="web-port">BalloonPredictor port</label><input id="web-port" type="number" min="1" max="65535" value="8001"></div></div><p>Turn on your VPN first if needed. The server will ask for a password or sign-in code when required.</p></div>
-<div class="actions"><button id="connect" type="submit">Open locally</button><button id="resume" type="button" class="quiet" hidden>Return to flight</button></div>
+<div class="actions"><button id="connect" type="submit" disabled>Open locally</button><button id="resume" type="button" class="quiet" hidden disabled>Return to flight</button></div>
 </form><p id="status" role="status"></p>
 <form id="challenge" hidden><h3 id="challenge-title"></h3><p id="challenge-text"></p><div id="prompts"></div><div class="actions"><button id="answer" type="submit">Continue</button><button id="cancel" type="button" class="quiet">Cancel</button></div></form>
 </main></body></html>
