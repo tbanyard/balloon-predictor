@@ -8,6 +8,7 @@ import tempfile
 import time
 from urllib.parse import urlsplit
 import webbrowser
+import sys
 
 import gi
 gi.require_version("Gtk", "3.0")
@@ -15,6 +16,8 @@ gi.require_version("WebKit2", "4.1")
 from gi.repository import Gio, GLib, Gtk, WebKit2
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from balloon_predictor.disk import SHARED_DATA_ROOT, personal_data_dir
 
 
 def origin(url):
@@ -172,6 +175,7 @@ class App:
         script = """(() => {
             const form=document.querySelector('#connection');
             if(form){
+                if(form.hidden)document.querySelector('#choose-local')?.click();
                 if(!window.__bpLocal&&form.dataset.ready==='true'&&!document.querySelector('#connect').disabled){
                     const mode=document.querySelector('#mode');mode.value='local';
                     mode.dispatchEvent(new Event('change'));form.requestSubmit();window.__bpLocal=true;
@@ -210,8 +214,10 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--smoke-test", type=Path)
     args = parser.parse_args()
-    root = (args.smoke_test or Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share") / "balloon-predictor").resolve()
-    root.mkdir(parents=True, exist_ok=True)
+    shared = os.environ.get("BP_SHARED_DATA_ROOT")
+    default = personal_data_dir(shared or SHARED_DATA_ROOT) if shared or SHARED_DATA_ROOT.is_dir() else Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local/share") / "balloon-predictor"
+    root = (args.smoke_test or default).resolve()
+    root.mkdir(parents=True, exist_ok=True, mode=0o700)
     with tempfile.TemporaryDirectory(prefix=".balloon-session-", dir=root) as temp:
         app = App(root, Path(temp), args.smoke_test is not None)
         try:

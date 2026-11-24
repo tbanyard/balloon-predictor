@@ -1,5 +1,9 @@
 # Paths are relative to this file. No credentials belong here.
-# data_dir: /absolute/path/to/weather-data  # Default: the current user’s app data.
+# On this server, default storage is /data1/tim/BP_Data/<Unix username>.
+# On other machines without that mount, the normal app-data folder is used.
+# data_dir: /absolute/path/to/weather-data  # An explicit path overrides the default.
+# shared_data_root: /data1/tim/BP_Data
+# shared_server: true  # Enable verified SSH workspaces using start-shared-server.sh.
 workers: 2
 max_weather_mb: 2048
 # Estimated uncompressed bytes limit per model-box export.

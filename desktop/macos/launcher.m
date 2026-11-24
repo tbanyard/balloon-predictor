@@ -256,6 +256,7 @@ static NSString *const nativeArch = @"x86_64";
     if (!self.testPageLoaded || self.testProbePending || self.testRequestedDownload) return;
     NSString *script = @"(() => { const form = document.querySelector('#connection');"
         @"if (form) {"
+        @"  if (form.hidden) document.querySelector('#choose-local')?.click();"
         @"  const status = document.querySelector('#status.error');"
         @"  if (status?.textContent) return 'error: ' + status.textContent;"
         @"  if (!window.__bpLocal && form.dataset.ready === 'true' && !document.querySelector('#connect').disabled) {"

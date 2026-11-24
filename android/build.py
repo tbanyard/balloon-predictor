@@ -106,7 +106,9 @@ def build(args, work):
     output = args.output / f"BalloonPredictor-{VERSION}-Android.apk"
     classes = apk(work, base, output, [*SOURCE.rglob("*.java"), *generated.rglob("*.java")], jars)
     (args.output / "SHA256SUMS.txt").write_text(f"{digest(output)}  {output.name}\n")
-    (args.output / "android-build.json").write_text(json.dumps({"version": VERSION, "signing": signing, "min_android_api": 26}, indent=2) + "\n")
+    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
+    (args.output / "android-build.json").write_text(json.dumps({"version": VERSION, "signing": signing, "min_android_api": 26,
+                                                              "source_commit": source_commit}, indent=2) + "\n")
     if args.test_output:
         args.test_output.mkdir(parents=True, exist_ok=True)
         folder = work / "instrumentation"

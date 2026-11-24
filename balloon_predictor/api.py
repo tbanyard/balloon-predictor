@@ -17,6 +17,7 @@ from starlette.background import BackgroundTask
 
 from . import __version__
 from .errors import MissingTerrainError, PredictorError
+from .disk import check_writable, disk_status, storage_failure
 from .exports import arrival_csv_export, csv_export, geojson, kml_export
 from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest, SondeExportRequest
 from .storage import activity, inventory, cleanup, StorageLeaseMiddleware
@@ -36,13 +37,14 @@ class StorageLocation(BaseModel):
 
 
 class Jobs:
-    def __init__(self, settings, store):
+    def __init__(self, settings, store, executor=None):
         self.settings, self.store = settings, store
-        self.executor = ThreadPoolExecutor(max_workers=settings.workers)
+        self.executor = executor or ThreadPoolExecutor(max_workers=settings.workers)
         self.records = {}
         self.lock = threading.RLock()
 
     def submit(self, kind, task):
+        check_writable(self.settings.data_dir)
         with self.lock:
             if sum(r["status"] in ("queued", "running") for r in self.records.values()) >= 16:
                 raise HTTPException(429, "Job queue is full. Wait for a running job to finish.")
@@ -72,15 +74,21 @@ class Jobs:
             except Exception as exc:
                 self.log_failure(job_id, kind, exc)
                 log = f"Server log: {self.settings.log_path} (job {job_id})."
-                message = str(exc) if isinstance(exc, PredictorError) else f"Unexpected processing error during {kind}. {log}"
+                detail = storage_failure(exc, self.settings.data_dir)
+                message = detail["message"] + " " + log if detail else str(exc) if isinstance(exc, PredictorError) else f"Unexpected processing error during {kind}. {log}"
                 if isinstance(exc, PredictorError) and "server log" in message:
                     message += " " + log
                 outcome = dict(status="failed", message=message, error=message)
                 if isinstance(exc, MissingTerrainError):
                     outcome["error_details"] = exc.details()
-            with self.lock:
-                # A terminal job may be cleaned up immediately.
+                elif detail:
+                    outcome["error_details"] = detail
+            try:
                 lease.__exit__(None, None, None)
+            except OSError as exc:
+                self.log_failure(job_id, kind, exc)
+            with self.lock:
+                # Publish the terminal state only after releasing its lease.
                 self.records[job_id].update(outcome)
         try:
             future = self.executor.submit(run)
@@ -93,13 +101,20 @@ class Jobs:
     def log_failure(self, job_id, kind, error):
         # Log stage, exception type and stack locations without response bodies,
         # exception messages or frame locals (which may include credentials).
-        errors = [error] + ([error.__cause__] if error.__cause__ else [])
-        trace = " | ".join(f"{type(exc).__name__}: " + " → ".join(
+        errors, seen = [], set()
+        while error is not None and id(error) not in seen and len(errors) < 8:
+            errors.append(error)
+            seen.add(id(error))
+            error = error.__cause__ or error.__context__
+        trace = " | ".join(f"{type(exc).__name__}" +
+            (f" [errno={exc.errno}]" if isinstance(exc, OSError) and isinstance(exc.errno, int) else "") + ": " + " → ".join(
             f"{Path(frame.filename).name}:{frame.lineno} in {frame.name}"
             for frame in traceback.extract_tb(exc.__traceback__)) for exc in errors)
         with self.lock:
             stage = self.records[job_id].get("stage", "starting")
             line = f"Job {job_id} ({kind}, {stage}) failed: {trace}"
+            if isinstance(errors[0], MissingTerrainError):
+                line += " | " + json.dumps(errors[0].details())
             try:
                 handler = RotatingFileHandler(self.settings.log_path, maxBytes=2_000_000,
                                               backupCount=2, encoding="utf-8")
@@ -128,20 +143,28 @@ class Jobs:
         raise HTTPException(404, "Job not found.")
 
 
-def create_app(settings=None):
+def create_app(settings=None, executor=None):
     settings = settings or Settings.load()
     store = WeatherStore(settings)
-    jobs = Jobs(settings, store)
+    jobs = Jobs(settings, store, executor)
 
     @asynccontextmanager
     async def lifespan(app):
         yield
-        jobs.executor.shutdown(wait=False, cancel_futures=True)
+        if executor is None:
+            jobs.executor.shutdown(wait=False, cancel_futures=True)
 
     app = FastAPI(title="Balloon Predictor", version=__version__, lifespan=lifespan)
     app.state.store, app.state.jobs = store, jobs
     app.state.edit_storage_location = False
     app.add_middleware(StorageLeaseMiddleware, settings=settings)
+
+    @app.exception_handler(OSError)
+    async def io_error(request: Request, exc: OSError):
+        detail = storage_failure(exc, settings.data_dir)
+        if detail:
+            return JSONResponse(status_code=507, content={"detail": detail["message"], "error_details": detail})
+        return JSONResponse(status_code=500, content={"detail": f"Could not access a local file. Server log: {settings.log_path}."})
 
     @app.exception_handler(PredictorError)
     async def known_error(request: Request, exc: PredictorError):
@@ -159,6 +182,10 @@ def create_app(settings=None):
         return {"datasets": store.list(), "defaults":{"dataset":settings.default_dataset, "era5_root":str(settings.era5_root),
                     "wrf_root":str(settings.wrf_root),"cache_mb":settings.cache_mb, "data_dir":str(settings.data_dir), "terrain_dir":str(store.terrain.root)},
                 "messages":store.native.messages}
+
+    @app.get("/api/storage/health")
+    def storage_health():
+        return disk_status(settings.data_dir, probe=True)
 
     @app.post("/api/weather/rescan", status_code=202)
     def weather_rescan():
@@ -320,7 +347,8 @@ def create_app(settings=None):
                 if saved != settings.data_dir:
                     pending = str(saved)
         return {**info, "config_path": str(settings.config_path or ""), "log_path": str(settings.log_path),
-                "editable": editable, "pending_data_dir": pending}
+                "editable": editable, "pending_data_dir": pending, "health": disk_status(settings.data_dir, probe=True),
+                "workspace_user": settings.workspace_user, "shared_server": settings.workspace_user is not None}
 
     @app.post("/api/storage/location")
     def storage_location(body: StorageLocation):
@@ -439,4 +467,12 @@ def create_app(settings=None):
     return app
 
 
-app = create_app()
+def configured_app():
+    settings = Settings.load()
+    if settings.shared_server:
+        from .multiuser import SharedServer
+        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8005")))
+    return create_app(settings)
+
+
+app = configured_app()

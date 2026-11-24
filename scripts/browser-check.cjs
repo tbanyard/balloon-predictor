@@ -34,7 +34,7 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   assert(ready,'Server failed: '+logs);browser=await chromium.launch({headless:true, ...(process.env.BP_TEST_CHROME?{executablePath:process.env.BP_TEST_CHROME,args:["--no-sandbox","--disable-dev-shm-usage"]}: {})});const context=await browser.newContext({viewport:{width:1540,height:1000},deviceScaleFactor:1,acceptDownloads:true});
   await context.route('https://**/*',route=>route.abort());const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.waitForFunction(()=>document.querySelector('#flight-tabs button'));
-  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.5.1','Version badge missing');
+  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.5.3','Version badge missing');
   await page.setViewportSize({width:1120,height:800});
   await page.waitForFunction(()=>document.querySelector('#trajectory-menu').contains(document.querySelector('#fit-button')));
   assert(await page.locator('.map-toolbar').evaluate(el=>el.scrollWidth<=el.clientWidth&&el.offsetHeight<62),'Toolbar wrapped or overflowed with flight controls open');

@@ -28,7 +28,7 @@ def verify_server(url):
         with build_opener(ProxyHandler({}), NoRedirect()).open(url + "/api/health", timeout=8) as response:
             info = json.loads(response.read(32768))
         if info.get("status") == "ok" and info.get("time_reference") == "UTC":
-            return
+            return info
     except (OSError, ValueError, AttributeError):
         pass
     raise ValueError("BalloonPredictor did not answer. Check the VPN, server address and web port.")
@@ -200,7 +200,9 @@ class Chooser:
                 url = self.local_url
             elif values["mode"] == "web":
                 url = direct_url(values["address"], values["allow_http"])
-                verify_server(url)
+                info = verify_server(url)
+                if info.get("requires_ssh_identity") and not info.get("browser_login"):
+                    raise ValueError("This server uses personal workspaces. Choose SSH tunnel and sign in with your Unix username.")
             else:
                 if not re.fullmatch(r"[a-zA-Z0-9._:-]+", values["host"]) or not values["username"]:
                     raise ValueError("Enter the SSH host and your SSH username.")
@@ -222,6 +224,8 @@ class Chooser:
                 write_json(self.preferences, values)
                 self.prefs = values
                 self.activate(url)
+                if forward and forward.signin:
+                    self.state["target"] = url + forward.signin
                 old, self.forward, forward = self.forward, forward, None
             if old:
                 old.stop()
@@ -285,6 +289,7 @@ class Forward:
     def __init__(self, chooser, host, ssh_port, username, web_port):
         self.chooser, self.host, self.ssh_port, self.username, self.web_port = chooser, host, ssh_port, username, web_port
         self.ready = Future()
+        self.signin = None
         self.loop = self.task = None
         self.thread = threading.Thread(target=self.run, daemon=True)
 
@@ -347,8 +352,18 @@ class Forward:
                                     preferred_auth=("keyboard-interactive", "password"), connect_timeout=300,
                                     login_timeout=300, keepalive_interval=25, keepalive_count_max=3) as connection:
             listener = await connection.forward_local_port("127.0.0.1", 0, "127.0.0.1", self.web_port)
-            self.ready.set_result(f"http://127.0.0.1:{listener.get_port()}")
             try:
+                url = f"http://127.0.0.1:{listener.get_port()}"
+                info = await asyncio.to_thread(verify_server, url)
+                if info.get("requires_ssh_identity"):
+                    from balloon_predictor.login import ssh_command
+                    reply = await connection.run(ssh_command(info.get("identity_socket")), check=True, timeout=12)
+                    identity = json.loads(reply.stdout)
+                    token = identity.get("token")
+                    if not isinstance(token, str) or not re.fullmatch(r"[A-Za-z0-9_-]{43}", token):
+                        raise ValueError("Could not open your personal workspace. Ask the server operator to check the sign-in service.")
+                    self.signin = "/signin#" + token
+                self.ready.set_result(url)
                 await connection.wait_closed()
             finally:
                 listener.close()

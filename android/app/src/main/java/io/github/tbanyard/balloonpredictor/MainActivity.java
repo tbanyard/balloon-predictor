@@ -26,6 +26,7 @@ public final class MainActivity extends Activity {
     FrameLayout content;
     ScrollView form;
     Button serverButton,connectButton,returnButton;
+    Button localChoice,serverChoice,weatherButton;
     Spinner mode;
     LinearLayout toolbar;
     private TextView offlineHint;
@@ -35,6 +36,7 @@ public final class MainActivity extends Activity {
     TextView status;
     WebView web;
     private LinearLayout webFields,sshFields;
+    private LinearLayout connectionOptions;
     private WebView pendingWeb;
     private ServerSession session,pendingSession;
     private SharedPreferences prefs,pins;
@@ -53,9 +55,19 @@ public final class MainActivity extends Activity {
             v.setPadding(e.left,e.top,e.right,e.bottom);return insets;
         });
         toolbar=new LinearLayout(this);toolbar.setGravity(Gravity.CENTER_VERTICAL);toolbar.setPadding(dp(12),0,dp(8),0);
-        TextView title=text("BalloonPredictor",18);title.setTypeface(null,android.graphics.Typeface.BOLD);title.setGravity(Gravity.CENTER_VERTICAL);
+        ImageView logo=new ImageView(this);logo.setImageResource(R.drawable.balloon);logo.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        LinearLayout.LayoutParams logoSize=new LinearLayout.LayoutParams(dp(27),dp(32));logoSize.setMarginEnd(dp(6));toolbar.addView(logo,logoSize);
+        TextView title=text("BalloonPredictor",16);title.setTypeface(null,android.graphics.Typeface.BOLD);title.setGravity(Gravity.CENTER_VERTICAL);
+        title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         toolbar.addView(title,new LinearLayout.LayoutParams(0,dp(44),1));
-        serverButton=button("Server",false);toolbar.addView(serverButton);layout.addView(toolbar);
+        String version="1.5.3";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        TextView versionLabel=text("v"+version,11);versionLabel.setPadding(0,0,dp(6),0);toolbar.addView(versionLabel);
+        weatherButton=button("Weather",false);weatherButton.setTextSize(12);weatherButton.setVisibility(View.GONE);toolbar.addView(weatherButton);
+        weatherButton.setOnClickListener(v->{if(web!=null)web.evaluateJavascript("document.querySelector('#weather-open')?.click()",null);});
+        serverButton=button("Server",false);serverButton.setTextSize(12);toolbar.addView(serverButton);layout.addView(toolbar);
+        for(Button action:new Button[]{weatherButton,serverButton}){
+            action.setMinWidth(0);action.setMinimumWidth(0);action.setPadding(dp(8),0,dp(8),0);
+        }
         content=new FrameLayout(this);layout.addView(content,new LinearLayout.LayoutParams(-1,0,1));setContentView(layout);
         buildForm();
         serverButton.setOnClickListener(v->{if(form.getVisibility()==View.VISIBLE&&web!=null)showFlight();else showForm();});
@@ -80,38 +92,56 @@ public final class MainActivity extends Activity {
     private void buildForm(){
         form=new ScrollView(this);form.setFillViewport(true);
         LinearLayout card=column();card.setPadding(dp(22),dp(18),dp(22),dp(28));card.setBackgroundColor(0xffffffff);
-        TextView title=text("Connect to BalloonPredictor",23);title.setTypeface(null,android.graphics.Typeface.BOLD);card.addView(title);
-        card.addView(text("Connect to a computer or server running BalloonPredictor. Turn on your VPN first if needed.",14));
-        label(card,"Connection");mode=new Spinner(this);mode.setContentDescription("Connection method");
+        TextView title=text("Where would you like to work?",23);title.setTypeface(null,android.graphics.Typeface.BOLD);card.addView(title);
+        card.addView(text("Choose this device or a server. Your current flight stays open while you choose.",14));
+        LinearLayout choices=new LinearLayout(this);choices.setPadding(0,dp(20),0,dp(18));card.addView(choices);
+        localChoice=choice("Local","On this phone",R.drawable.device);serverChoice=choice("Server","Connect securely",R.drawable.server);
+        LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,dp(165),1);left.setMarginEnd(dp(10));
+        choices.addView(localChoice,left);choices.addView(serverChoice,new LinearLayout.LayoutParams(0,dp(165),1));
+        connectionOptions=column();card.addView(connectionOptions);connectionOptions.setVisibility(View.GONE);
+        label(connectionOptions,"Connection");mode=new Spinner(this);mode.setContentDescription("Connection method");
         ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Web server","SSH tunnel","Run locally · offline forecast"});
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);mode.setAdapter(adapter);
-        card.addView(mode,new LinearLayout.LayoutParams(-1,dp(44)));
+        connectionOptions.addView(mode,new LinearLayout.LayoutParams(-1,dp(44)));
         int uri=InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_VARIATION_URI;
-        webFields=column();card.addView(webFields);address=field(webFields,"Server address","https://server.example.org",prefs.getString("address",""),uri);
+        webFields=column();connectionOptions.addView(webFields);address=field(webFields,"Server address","https://server.example.org",prefs.getString("address",""),uri);
         allowHttp=new CheckBox(this);allowHttp.setText("Allow HTTP on a trusted network or VPN");allowHttp.setChecked(prefs.getBoolean("http",false));
         webFields.addView(allowHttp);
-        sshFields=column();card.addView(sshFields);
+        sshFields=column();connectionOptions.addView(sshFields);
         host=field(sshFields,"SSH host","server.example.org",prefs.getString("host",""),uri);
         username=field(sshFields,"SSH username","Username",prefs.getString("username",""),InputType.TYPE_CLASS_TEXT|InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         LinearLayout ports=new LinearLayout(this);sshFields.addView(ports);LinearLayout a=column(),b=column();
         ports.addView(a,new LinearLayout.LayoutParams(0,-2,1));ports.addView(b,new LinearLayout.LayoutParams(0,-2,1));
         sshPort=field(a,"SSH port","22",prefs.getString("ssh_port","22"),InputType.TYPE_CLASS_NUMBER);
-        webPort=field(b,"BalloonPredictor port","8001",prefs.getString("web_port","8001"),InputType.TYPE_CLASS_NUMBER);
+        webPort=field(b,"BalloonPredictor port","8005",prefs.getString("web_port","8005"),InputType.TYPE_CLASS_NUMBER);
         sshFields.addView(text("The server asks for a password or sign-in code when required. Passwords aren’t saved.",14));
         offlineHint=text("Open a saved .bpforecast file to calculate a flight on this phone. You can prepare a pack on the server before you lose signal.",14);
-        card.addView(offlineHint);
+        connectionOptions.addView(offlineHint);
         mode.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener(){
             public void onItemSelected(AdapterView<?> parent,View v,int i,long id){updateMode();}
             public void onNothingSelected(AdapterView<?> parent){}
         });
-        mode.setSelection(prefs.getInt("mode",0));updateMode();
-        connectButton=button("Connect",true);card.addView(connectButton);connectButton.setOnClickListener(v->connect(signIn));
+        mode.setSelection(prefs.getInt("mode",1));updateMode();
+        connectButton=button("Connect",true);connectionOptions.addView(connectButton);connectButton.setOnClickListener(v->connect(signIn));
         returnButton=button("Return to flight",false);card.addView(returnButton);returnButton.setOnClickListener(v->showFlight());
-        vpn=button("VPN settings",false);card.addView(vpn);vpn.setOnClickListener(v->{
+        vpn=button("VPN settings",false);connectionOptions.addView(vpn);vpn.setOnClickListener(v->{
             try{startActivity(new Intent(Settings.ACTION_VPN_SETTINGS));}catch(Exception ignored){toast("Open VPN settings in Android Settings.");}
         });
         status=text("",14);status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);card.addView(status);
+        localChoice.setOnClickListener(v->chooseMode(true));serverChoice.setOnClickListener(v->chooseMode(false));
         form.addView(card);content.addView(form,new FrameLayout.LayoutParams(-1,-1));updateMode();
+    }
+
+    private Button choice(String name,String detail,int icon){
+        Button result=button(name+"\n"+detail,false);result.setTextSize(18);result.setGravity(Gravity.CENTER);
+        result.setCompoundDrawablePadding(dp(12));
+        android.graphics.drawable.Drawable image=getDrawable(icon);image.setBounds(0,0,dp(42),dp(42));
+        result.setCompoundDrawables(null,image,null,null);result.setContentDescription(name+" · "+detail);return result;
+    }
+    private void chooseMode(boolean local){
+        int saved=prefs.getInt("mode",1);mode.setSelection(local?2:saved==0?0:1);
+        connectionOptions.setVisibility(View.VISIBLE);updateMode();
+        localChoice.setSelected(local);serverChoice.setSelected(!local);
     }
 
     private int dp(int n){return Math.round(n*getResources().getDisplayMetrics().density);}
@@ -129,16 +159,18 @@ public final class MainActivity extends Activity {
         int modeId=mode.getSelectedItemPosition();
         sshFields.setVisibility(modeId==1?View.VISIBLE:View.GONE);webFields.setVisibility(modeId==0?View.VISIBLE:View.GONE);
         offlineHint.setVisibility(modeId==2?View.VISIBLE:View.GONE);
+        mode.setVisibility(modeId==2?View.GONE:View.VISIBLE);
         if(vpn!=null)vpn.setVisibility(modeId==2?View.GONE:View.VISIBLE);
         if(connectButton!=null)connectButton.setText(modeId==2?"Open offline workspace":web==null?"Connect":"Connect again");
     }
     private void hideKeyboard(){((InputMethodManager)getSystemService(INPUT_METHOD_SERVICE)).hideSoftInputFromWindow(form.getWindowToken(),0);}
     private void showForm(){
+        weatherButton.setVisibility(View.GONE);
         serverButton.setVisibility(View.VISIBLE);if(web!=null)web.setVisibility(View.GONE);
         form.setVisibility(View.VISIBLE);returnButton.setVisibility(web==null?View.GONE:View.VISIBLE);
         updateMode();
     }
-    private void showFlight(){if(web!=null){hideKeyboard();form.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);}}
+    private void showFlight(){if(web!=null){hideKeyboard();form.setVisibility(View.GONE);web.setVisibility(View.VISIBLE);weatherButton.setVisibility(session!=null&&!session.offline?View.VISIBLE:View.GONE);}}
     @Override public void onBackPressed(){
         if(form.getVisibility()==View.VISIBLE&&web!=null)showFlight();
         else if(web!=null&&web.canGoBack())web.goBack();
@@ -210,6 +242,9 @@ public final class MainActivity extends Activity {
             public void onReceivedError(WebView v,WebResourceRequest r,WebResourceError e){if(r.isForMainFrame())error("The flight page could not load. Check the VPN or reconnect from Server.");}
             public void onReceivedHttpError(WebView v,WebResourceRequest r,WebResourceResponse e){if(r.isForMainFrame())error("The server returned HTTP "+e.getStatusCode()+".");}
             public void onPageFinished(WebView v,String url){
+                if(sameOrigin(url,candidate.origin)&&!candidate.offline)
+                    v.evaluateJavascript("document.documentElement.dataset.host='android';window.dispatchEvent(new Event('resize'))",null);
+                if(candidate.signin!=null&&url.contains("/signin"))return;
                 if(invalid||pendingWeb!=v||token!=attempt||!sameOrigin(url,candidate.origin))return;
                 if(web!=null){content.removeView(web);web.destroy();}
                 ServerSession old=session;session=candidate;web=v;pendingWeb=null;pendingSession=null;
@@ -225,7 +260,7 @@ public final class MainActivity extends Activity {
                 catch(Exception e){picking=null;callback.onReceiveValue(null);}return true;
             }
         });
-        view.loadUrl(candidate.origin+(candidate.offline?"/offline/index.html":"/"));
+        view.loadUrl(candidate.origin+(candidate.offline?"/offline/index.html":candidate.signin!=null?candidate.signin:"/"));
         ui.postDelayed(()->{if(pendingWeb==view)failed(token,"The flight page did not load in time.");},20000);
     }
 

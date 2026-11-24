@@ -1,12 +1,12 @@
 # BalloonPredictor for macOS
 
-Use **BalloonPredictor-1.4.0-macOS-Universal.dmg** on an Apple silicon or
+Use **BalloonPredictor-1.5.3-macOS-Universal.dmg** on an Apple silicon or
 Intel Mac running **macOS 15 Sequoia or newer**. The same disk image works
 for both processor types. It includes Python and the forecast libraries.
 
 1. Open the disk image and drag **BalloonPredictor** to **Applications**.
 2. Open **BalloonPredictor** from Applications. It has its own window.
-3. Click **Calculate flight** with **Demo · synthetic winds** selected
+3. Choose **Local** to calculate on this Mac, or **Server** to connect over web/SSH. In local mode, click **Calculate flight** with **Demo · synthetic winds** selected
    to try it. Choose **Online · ECMWF operational IFS** or **Online · NOAA
    GFS** in the weather menu to download a forecast for a real flight.
 

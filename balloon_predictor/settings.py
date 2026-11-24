@@ -6,11 +6,19 @@ from pathlib import Path
 
 import yaml
 from dotenv import load_dotenv
+from .disk import SHARED_DATA_ROOT, personal_data_dir
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def user_data_dir():
+def account_data_dir(root):
+    return personal_data_dir(root)
+
+
+def user_data_dir(shared_root=None):
+    shared_root = shared_root or os.environ.get("BP_SHARED_DATA_ROOT")
+    if shared_root or (sys.platform.startswith("linux") and SHARED_DATA_ROOT.is_dir()):
+        return account_data_dir(shared_root or SHARED_DATA_ROOT)
     if sys.platform == "win32":
         return Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData/Local") / "BalloonPredictor/data"
     if sys.platform == "darwin":
@@ -63,6 +71,11 @@ class Settings:
     terrain_dir: Path | None = None
     max_export_mb: int = 4096
     default_dataset: str = "era5"
+    shared_server: bool = False
+    shared_data_root: Path | None = None
+    workspace_user: str | None = None
+    web_login_ssh_port: int = 22
+    web_login_host_key_file: Path | None = None
 
     def __post_init__(self):
         if self.era5_root is None:
@@ -80,7 +93,8 @@ class Settings:
         load_dotenv(ROOT / ".env", override=False)
         config_path = Path(path or os.environ.get("BP_CONFIG", ROOT / "config.yml")).expanduser().resolve()
         config = configured_data(config_path)
-        data_dir = Path(os.environ.get("BP_DATA_DIR", config.get("data_dir", user_data_dir()))).expanduser()
+        configured = os.environ.get("BP_DATA_DIR") or config.get("data_dir")
+        data_dir = Path(configured if configured else user_data_dir(config.get("shared_data_root"))).expanduser()
         if not data_dir.is_absolute():
             data_dir = config_path.parent / data_dir
         def root(key, env, default=None):
@@ -97,9 +111,26 @@ class Settings:
                    max(0.1, float(config.get("max_time_gap_hours", 6))),
                    root("terrain_dir", "BP_TERRAIN_DIR", str(data_dir / "terrain")),
                    int(config.get("max_export_mb", 4096)),
-                   str(config.get("default_dataset", "era5")))
+                   str(config.get("default_dataset", "era5")),
+                   config.get("shared_server", sys.platform.startswith("linux") and SHARED_DATA_ROOT.is_dir() and not configured) is True,
+                   root("shared_data_root", "BP_SHARED_DATA_ROOT", str(SHARED_DATA_ROOT)),
+                   None,
+                   int(os.environ.get("BP_WEB_LOGIN_SSH_PORT", config.get("web_login_ssh_port", 22))),
+                   root("web_login_host_key_file", "BP_WEB_LOGIN_HOST_KEY_FILE"))
 
     def prepare(self):
+        from .disk import storage_failure
+        from .errors import PredictorError
+        try:
+            # Newly created personal folders stay private even beneath a
+            # group/world-writable parent. Existing permissions are retained.
+            self.data_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            self._prepare_folders()
+        except OSError as error:
+            detail = storage_failure(error, self.data_dir)
+            raise PredictorError(detail["message"] if detail else f"Cannot create the data folder: {self.data_dir}") from error
+
+    def _prepare_folders(self):
         for name in ("raw", "cache", "weather", "results", "exports", "locks", "terrain", "logs"):
             (self.data_dir / name).mkdir(parents=True, exist_ok=True)
 

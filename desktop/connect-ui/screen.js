@@ -4,13 +4,28 @@ const field=key=>$(key.replaceAll("_","-"));
 const message=(text,error=false)=>{$("status").textContent=text;$("status").classList.toggle("error",error);};
 const form=$("connection"),connect=$("connect"),resume=$("resume"),splash=$("splash");
 let challenge=null,initialized=false,splashDone=false,waiting=false,busy=false,controllerReady=false;
+let selected=null,lastServerMode="ssh";
+function choose(local){
+  selected=local?"local":"server";
+  form.hidden=false;
+  if(!local&&$("mode").value!=="local")lastServerMode=$("mode").value;
+  $("mode").value=local?"local":lastServerMode;
+  $("choose-local").setAttribute("aria-pressed",String(local));
+  $("choose-server").setAttribute("aria-pressed",String(!local));
+  mode();updateActions();
+}
+$("choose-local").onclick=()=>choose(true);
+$("choose-server").onclick=()=>choose(false);
 function updateActions(){
-  const ready=initialized&&splashDone&&controllerReady;
+  const ready=initialized&&splashDone&&controllerReady&&selected!==null;
   form.dataset.ready=String(ready);
-  connect.disabled=resume.disabled=!ready||busy||waiting;
+  connect.disabled=!ready||busy||waiting;
+  resume.disabled=!initialized||!splashDone||!controllerReady||busy||waiting;
 }
 function mode(){
   const value=$("mode").value;
+  $("connection-method").hidden=value==="local";$("local-description").hidden=value!=="local";
+  if(value!=="local")lastServerMode=value;
   $("web").hidden=value!=="web";$("ssh").hidden=value!=="ssh";
   $("address").disabled=value!=="web";
   for(const key of ["ssh-port","web-port"])$(key).disabled=value!=="ssh";
@@ -62,6 +77,7 @@ async function poll(){
     const state=await response.json();
     if(!initialized){
       for(const key of fields)if(state.prefs[key]!==undefined){
+        if(key==="mode"&&selected!==null)continue;
         if(field(key).type==="checkbox")field(key).checked=state.prefs[key]===true;
         else field(key).value=state.prefs[key];
       }

@@ -1,3 +1,30 @@
+# Validation for v1.5.3
+
+Local Python 3.12 validation passes **131 tests**, with **two Unix-socket tests
+skipped** because this execution workspace prohibits Unix-socket binding. Both
+tests are mandatory in Linux CI (`BP_REQUIRE_UNIX_BROKER_TEST=1`); they exercise
+the kernel peer-credential broker and the full browser/SSH/broker handoff.
+
+The local sign-in regressions use real loopback SSH password authentication and
+interactive verification codes. They check failure/retry, host-key rejection,
+Origin checks, cookie attributes, cancellation, logout, account selection and
+native-app reconnects. Only the final Unix-socket boundary is stubbed in the
+tests that must run inside this restricted workspace.
+
+The UI integration suites and real Chromium browser regressions pass, including
+the login page at desktop/mobile widths, private workspaces, rescan, exports,
+desktop local startup and the existing weather/panel workflows. User-facing
+server defaults are 8005. Syntax and compilation checks also pass.
+
+The kit's VALIDATION.json records APK build checks and prepare/release-script
+simulation results. Windows/macOS/Debian installation and Android emulator
+testing remain required in GitHub Actions before publication. This local record
+does not claim those native workflows have already run for v1.5.3.
+
+Previous validation records are retained below as historical information.
+
+---
+
 # Validation for v1.4
 
 The v1.4 release passes **89 backend tests**. Its existing frontend DOM/API

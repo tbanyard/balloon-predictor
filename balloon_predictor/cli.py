@@ -57,7 +57,7 @@ def build_parser():
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="Start the local map and API")
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8001)
+    serve.add_argument("--port", type=int, default=8005)
     serve.add_argument("--reload", action="store_true")
     serve.add_argument("--config",dest="serve_config",help="Personal configuration YAML")
     serve.add_argument("--era5-root",help="Local ERA5 viewer archive directory")
@@ -112,7 +112,7 @@ def main(argv=None):
         if args.cache_mb:
             settings.cache_mb=max(16,args.cache_mb)
             os.environ["BP_CACHE_MB"]=str(settings.cache_mb)
-    store = WeatherStore(settings)
+    store = None if args.command == "serve" and settings.shared_server else WeatherStore(settings)
     from .storage import activity
     lease = activity(settings) if args.command != "serve" else None
     if lease:
@@ -123,7 +123,11 @@ def main(argv=None):
             import uvicorn
             if settings.config_path:
                 os.environ["BP_CONFIG"] = str(settings.config_path)
-            print(f"Weather data: {settings.data_dir}\nJob log: {settings.log_path}", flush=True)
+            os.environ["BP_SERVER_PORT"] = str(args.port)
+            if settings.shared_server:
+                print(f"Personal workspaces: {settings.shared_data_root}/<SSH username>\nShared server on port {args.port}", flush=True)
+            else:
+                print(f"Weather data: {settings.data_dir}\nJob log: {settings.log_path}", flush=True)
             # A single process keeps weather caches/jobs consistent.
             uvicorn.run("balloon_predictor.api:app", host=args.host, port=args.port, reload=args.reload)
         elif args.command == "list":

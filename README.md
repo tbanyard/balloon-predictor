@@ -1,10 +1,15 @@
-# BalloonPredictor v1.5.1
+# BalloonPredictor v1.5.3
 
-See [what changed in v1.5.1](docs/V1.5.1.md) and the [supported installers](docs/V1.5.md).
+See [v1.5.3 and the shared server setup](docs/V1.5.3.md), including the browser login page, personal workspaces and the Local/Server start screen.
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
-Runs on your computer at **http://localhost:8001**.
+Runs on your computer at **http://localhost:8005**. On the shared Linux server, use
+`bash start-shared-server.sh --port 8005` after stopping the old server.
+This uses `/data1/tim/BP_Data/<SSH username>` for each person's workspace.
+The launcher puts its virtual environment, temporary files and pip cache on the same data volume.
+Open the server's port 8005 in your browser and sign in with your normal server
+username and password. There is no command or timed link to generate.
 
 Start with [QUICKSTART.md](QUICKSTART.md). Version 1.4 gives the panels consistent
 names, clearer ground settings, an orange balloon loading animation, independent
@@ -36,11 +41,13 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-1.5.1 directory. Initial installation needs internet
+the extracted balloon-predictor-v1.5.3 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
-Generated data is per-user under `~/.local/share/balloon-predictor` unless
-`BP_DATA_DIR` is set. Existing project-local `.venv` installations are supported.
+On Linux with `/data1/tim/BP_Data` mounted, generated data defaults to a username
+folder there. Other computers use their normal per-user app-data folder.
+`BP_DATA_DIR` or an explicit `data_dir` still overrides the default.
+Existing project-local `.venv` installations remain supported.
 
 **macOS / Linux**
 
@@ -64,7 +71,7 @@ To run the server from source, use PowerShell:
 
 If your PowerShell policy blocks the script, use the manual commands below.
 The scripts install the tested dependency snapshot on the first run and then
-start the server. Open **http://localhost:8001** and click **Calculate flight**
+start the server. Open **http://localhost:8005** and click **Calculate flight**
 to use the selected ERA5 archive. To try without local data, choose
 **Demo · synthetic winds** explicitly. Press Ctrl+C to stop the server.
 
@@ -362,7 +369,7 @@ balloon-predictor predict examples/flight-demo.yml --output data/results/demo-fl
 The output prefix produces .json, .csv, .geojson and .kml files. API predictions
 are also saved in data/results/ and remain exportable after a server restart.
 
-API reference: **http://localhost:8001/docs**
+API reference: **http://localhost:8005/docs**
 
 | Endpoint | Purpose |
 |---|---|
@@ -381,7 +388,7 @@ for every Tawhiri endpoint, profile or error schema.
 Example:
 
 ~~~bash
-curl -X POST http://localhost:8001/predict \
+curl -X POST http://localhost:8005/predict \
   -H "Content-Type: application/json" \
   -d '{"dataset":"demo","launch_datetime":"2024-01-15T12:00:00Z","launch_latitude":52.817208,"launch_longitude":355.875,"launch_altitude":100,"ascent_rate":2,"burst_altitude":25000,"descent_rate":5}'
 ~~~

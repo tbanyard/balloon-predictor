@@ -1,6 +1,7 @@
 package io.github.tbanyard.balloonpredictor;
 
 import com.jcraft.jsch.HostKey;
+import com.jcraft.jsch.ChannelExec;
 import com.jcraft.jsch.HostKeyRepository;
 import com.jcraft.jsch.JSch;
 import com.jcraft.jsch.Session;
@@ -13,6 +14,8 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.Base64;
+import java.util.concurrent.TimeUnit;
+import org.json.JSONObject;
 
 final class ServerSession implements AutoCloseable {
     interface Prompts {
@@ -24,9 +27,11 @@ final class ServerSession implements AutoCloseable {
     static final String OFFLINE_ORIGIN="https://appassets.androidplatform.net";
     final String origin;
     final boolean offline;
+    final String signin;
     private final Session ssh;
 
-    private ServerSession(String origin, Session ssh) { this.origin=origin; this.ssh=ssh; this.offline=OFFLINE_ORIGIN.equals(origin); }
+    private ServerSession(String origin, Session ssh) { this(origin,ssh,null); }
+    private ServerSession(String origin, Session ssh,String signin) { this.origin=origin; this.ssh=ssh; this.signin=signin;this.offline=OFFLINE_ORIGIN.equals(origin); }
     static ServerSession offline(){return new ServerSession(OFFLINE_ORIGIN,null);}
 
     static ServerSession direct(String address, boolean allowHttp) {
@@ -40,7 +45,9 @@ final class ServerSession implements AutoCloseable {
         if ("http".equals(scheme)&&!allowHttp) throw new IllegalArgumentException("Use HTTPS or allow HTTP on your trusted VPN or local network.");
         String origin=scheme+"://"+host.toLowerCase(java.util.Locale.ROOT)+(port>0&&port!=standard?":"+port:"");
         if (OFFLINE_ORIGIN.equals(origin)) throw new IllegalArgumentException("Choose Run locally for the offline workspace.");
-        if (!healthy(origin)) throw new IllegalArgumentException("BalloonPredictor did not answer. Check the VPN, address and port.");
+        JSONObject health=healthInfo(origin);
+        if (health==null) throw new IllegalArgumentException("BalloonPredictor did not answer. Check the VPN, address and port.");
+        if (health.optBoolean("requires_ssh_identity")&&!health.optBoolean("browser_login"))throw new IllegalArgumentException("This server uses personal workspaces. Choose SSH tunnel and sign in with your Unix username.");
         return new ServerSession(origin,null);
     }
 
@@ -73,8 +80,35 @@ final class ServerSession implements AutoCloseable {
                 assigned=session.setPortForwardingL("127.0.0.1",0,"127.0.0.1",webPort);
             }
             String origin="http://127.0.0.1:"+assigned;
-            if(!healthy(origin))throw new IllegalArgumentException("SSH signed in, but BalloonPredictor did not answer at server port "+webPort+".");
-            return new ServerSession(origin,session);
+            JSONObject health=healthInfo(origin);
+            if(health==null)throw new IllegalArgumentException("SSH signed in, but BalloonPredictor did not answer at server port "+webPort+".");
+            String signin=null;
+            if(health.optBoolean("requires_ssh_identity")){
+                String path=health.optString("identity_socket");
+                if(!path.startsWith("/")||path.getBytes(StandardCharsets.UTF_8).length>103||path.indexOf(0)>=0)
+                    throw new IllegalArgumentException("The server returned an invalid workspace sign-in address.");
+                String script="import base64,socket,sys;s=socket.socket(socket.AF_UNIX,socket.SOCK_STREAM);s.settimeout(8);"+
+                    "s.connect(base64.b64decode(sys.argv[1]).decode());print(s.makefile(\u0027rb\u0027).readline(4096).decode().strip())";
+                String encoded=Base64.getEncoder().encodeToString(path.getBytes(StandardCharsets.UTF_8));
+                ChannelExec command=(ChannelExec)session.openChannel("exec");
+                try{
+                    command.setCommand("python3 -c \""+script+"\" "+encoded);command.setInputStream(null);
+                    InputStream input=command.getInputStream();command.connect(8000);
+                    java.io.ByteArrayOutputStream bytes=new java.io.ByteArrayOutputStream();
+                    long deadline=System.nanoTime()+TimeUnit.SECONDS.toNanos(12);
+                    byte[] block=new byte[1024];
+                    while(System.nanoTime()<deadline){
+                        while(input.available()>0){int n=input.read(block);if(n<0)break;bytes.write(block,0,n);if(bytes.size()>8192)throw new IllegalArgumentException("Invalid workspace sign-in response.");}
+                        if(command.isClosed()&&input.available()==0)break;
+                        Thread.sleep(30);
+                    }
+                    if(!command.isClosed()||command.getExitStatus()!=0)throw new IllegalArgumentException("The server could not open a personal workspace. Ask its operator to check the sign-in service.");
+                    String token=new JSONObject(bytes.toString("UTF-8")).optString("token");
+                    if(!token.matches("[A-Za-z0-9_-]{43}"))throw new IllegalArgumentException("Could not sign into your personal workspace. Check the server folder permissions.");
+                    signin="/signin#"+token;
+                }finally{command.disconnect();}
+            }
+            return new ServerSession(origin,session,signin);
         } catch (Exception error) {
             session.disconnect();
             throw error;
@@ -82,18 +116,22 @@ final class ServerSession implements AutoCloseable {
     }
 
     static boolean healthy(String origin) {
+        return healthInfo(origin)!=null;
+    }
+    static JSONObject healthInfo(String origin) {
         HttpURLConnection connection=null;
         try {
             connection=(HttpURLConnection)URI.create(origin+"/api/health").toURL().openConnection(Proxy.NO_PROXY);
             connection.setConnectTimeout(8000);connection.setReadTimeout(8000);connection.setInstanceFollowRedirects(false);
-            if(connection.getResponseCode()!=200)return false;
+            if(connection.getResponseCode()!=200)return null;
             try(InputStream source=connection.getInputStream()){
                 byte[] buffer=new byte[8192];int total=0,n;
                 while(total<buffer.length&&(n=source.read(buffer,total,buffer.length-total))!=-1)total+=n;
-                String result=new String(buffer,0,total,StandardCharsets.UTF_8).replaceAll("\\s","");
-                return result.contains("\"status\":\"ok\"")&&result.contains("\"time_reference\":\"UTC\"");
+                String result=new String(buffer,0,total,StandardCharsets.UTF_8);
+                JSONObject data=new JSONObject(result);
+                return "ok".equals(data.optString("status"))&&"UTC".equals(data.optString("time_reference"))?data:null;
             }
-        } catch(Exception ignored){return false;}
+        } catch(Exception ignored){return null;}
         finally {if(connection!=null)connection.disconnect();}
     }
     @Override public void close(){if(ssh!=null)ssh.disconnect();}

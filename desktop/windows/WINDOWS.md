@@ -4,7 +4,7 @@ Open **BalloonPredictor** from the Start menu. It opens in its own window.
 Setup includes Python and the forecast libraries. No Python, Conda or
 server command is needed.
 
-The first launch selects **Demo · synthetic winds**. Click **Calculate
+Choose **Local** on the start screen to run on this PC, or **Server** to use a web server or SSH tunnel. In local mode, the first launch selects **Demo · synthetic winds**. Click **Calculate
 flight** to try the app. For real weather, choose **Online · ECMWF
 operational IFS** or **Online · NOAA GFS** in the weather dataset menu and
 download the forecast for your launch. Model downloads and online map
@@ -24,7 +24,7 @@ The startup log is **%LOCALAPPDATA%\BalloonPredictor\BalloonPredictor.log**.
 
 ## Building and testing
 
-The Windows installer workflow runs on a push to **windows-installer-test**.
+The Windows installer workflow runs on a push to **release-v1.5.3-test**.
 It builds a per-user x64 installer for Windows 11 and Windows 10 22H2.
 The workflow installs it into a path with spaces, launches the installed
 app with its bundled Python and WebView2, exercises synthetic GRIB, terrain

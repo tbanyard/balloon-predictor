@@ -131,3 +131,7 @@ details>summary{list-style:none;display:flex;align-items:center;justify-content:
 @media(max-width:760px){.map-toolbar{min-height:42px;padding-block:5px}.map-toolbar .map-actions{gap:7px;width:auto}.map-toolbar #share-button{display:inline-block}.map-heading .badge{max-width:85px}.map-toolbar .window-open-buttons{gap:7px}.trajectory-menu .trajectory-switch button{min-width:31px;min-height:18px}.trajectory-menu .trajectory-switch button[aria-checked=true]>span{transform:translateX(15px)}}
 /* Keep focused plot windows below the toolbar's overflow sheet. */
 .window-area{isolation:isolate}
+
+/* The Android shell supplies the logo, version, Weather and Server actions. */
+:root[data-host=android] .topbar{display:none}
+:root[data-host=android] .workspace{height:100dvh}

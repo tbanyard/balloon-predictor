@@ -6,6 +6,7 @@ import re
 import uuid
 from filelock import FileLock, Timeout
 from .errors import PredictorError
+from .disk import storage_failure
 
 
 @contextmanager
@@ -97,8 +98,21 @@ class StorageLeaseMiddleware:
         self.app, self.settings = app, settings
 
     async def __call__(self, scope, receive, send):
-        if scope["type"] == "http" and (scope.get("path", "").startswith("/api/") or scope.get("path") == "/predict") and scope.get("path") != "/api/storage/cleanup":
-            with activity(self.settings):
+        if scope["type"] == "http" and (scope.get("path", "").startswith("/api/") or scope.get("path") == "/predict") and scope.get("path") not in {"/api/health", "/api/storage", "/api/storage/health", "/api/storage/cleanup"}:
+            lease = activity(self.settings)
+            try:
+                lease.__enter__()
+            except OSError as error:
+                from starlette.responses import JSONResponse
+                detail = storage_failure(error, self.settings.data_dir)
+                await JSONResponse(status_code=507 if detail else 503, content={
+                    "detail": detail["message"] if detail else "Cannot access the server data folder.",
+                    "error_details": detail,
+                })(scope, receive, send)
+                return
+            try:
                 await self.app(scope, receive, send)
+            finally:
+                lease.__exit__(None, None, None)
         else:
             await self.app(scope, receive, send)

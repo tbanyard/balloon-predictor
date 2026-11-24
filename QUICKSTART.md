@@ -1,48 +1,62 @@
-# BalloonPredictor v1.5.1
+# BalloonPredictor v1.5.3
 
-Extract the source ZIP anywhere you can write. Its `balloon-predictor-1.5.1` folder can sit
-beside v1.3. Python 3.12 is recommended. To keep concurrently running versions
+For your shared Linux server, stop the previous process on 8005, extract this
+version, activate Python 3.12 or newer, and run from its source directory:
+
+```bash
+bash start-shared-server.sh
+```
+
+Open **http://YOUR-SERVER:8005** over your VPN and sign in with your normal server
+username and password. There is no separate command or timed link. The existing
+BP_Data folders and .server-8005 configuration are retained. See
+[the shared-server guide](docs/V1.5.3.md) for first-time migration and SSH settings.
+
+For a standalone source installation, extract the ZIP anywhere you can write.
+Python 3.12 or newer is required. To keep concurrently running versions
 independent, use a separate Conda environment:
 
 ```bash
-conda create -n balloon-v14 -c conda-forge python=3.12 pip
-conda activate balloon-v14
-cd balloon-predictor-1.5.1
+conda create -n balloon-v153 -c conda-forge python=3.12 pip
+conda activate balloon-v153
+cd balloon-predictor-v1.5.3
 python -m pip install -r requirements.lock.txt
 python -m pip check
-bash start.sh --port 8001
+bash start.sh --port 8005
 ```
 
 Install once in that environment. For subsequent launches:
 
 ```bash
-conda activate balloon-v14
-cd balloon-predictor-1.5.1
-bash start.sh --port 8001
+conda activate balloon-v153
+cd balloon-predictor-v1.5.3
+bash start.sh --port 8005
 ```
 
-Open **http://127.0.0.1:8001**. Use another free port if an existing server is
-already on 8001, or stop that server first. A server on port 8000 can keep
+Open **http://127.0.0.1:8005**. Use another free port if an existing server is
+already on 8005, or stop that server first. A server on port 8000 can keep
 running in its own environment. Avoid changing packages in an environment used
 by another running application.
 
-The server dependency lock is unchanged from v1.4. A compatible existing environment
-can be used; matching packages do not need reinstalling. Without an activated
+The server dependency lock now includes AsyncSSH and cryptography for browser
+sign-in. A compatible existing environment can be used; matching packages do not
+need reinstalling. Without an activated
 environment, `bash start.sh` manages a per-user environment automatically. That
 automatic environment is shared across predictor versions, so use explicitly
 separate environments when keeping different versions running independently.
 
-Launch setups, weather storage paths and v1.3 window geometry are retained.
-Linux's default launcher data directory remains
-`~/.local/share/balloon-predictor` (or `$XDG_DATA_HOME/balloon-predictor`). The
-weather manager shows the actual server paths. Different environments do not
-isolate this data folder: use `BP_DATA_DIR` for separate data collections if
-wanted. Do not clear data while v1.2 or older processes are using it.
+Launch setups, weather storage paths and window geometry are retained. On the
+shared Linux system, each verified account uses `/data1/tim/BP_Data/<username>`.
+Other Linux systems default to `~/.local/share/balloon-predictor` (or
+`$XDG_DATA_HOME/balloon-predictor`). The weather manager shows the actual paths.
+Different Python environments do not isolate data: set `BP_DATA_DIR` for a
+separate standalone data collection if wanted. Do not clear data while v1.2 or
+older processes are using it.
 
 For a remote server, forward the port from your computer:
 
 ```bash
-ssh -L 8001:127.0.0.1:8001 tim@YOUR_SERVER
+ssh -L 8005:127.0.0.1:8005 tim@YOUR_SERVER
 ```
 
 ## Weather and terrain
@@ -97,7 +111,8 @@ geometric line or eliminate forecast uncertainty.
 
 ## More details
 
-- [docs/V1.4.md](docs/V1.4.md): changes and verification limits.
+- [docs/V1.5.3.md](docs/V1.5.3.md): browser login, storage and current installers.
+- [docs/V1.4.md](docs/V1.4.md): earlier interface changes and verification limits.
 - [docs/V1.3.md](docs/V1.3.md): model-box contents, terrain physics and cleanup.
 - [docs/API-AND-ORIGINS.md](docs/API-AND-ORIGINS.md): API/OAS/GET/POST and Data origins.
 - [docs/V1.5.md](docs/V1.5.md): supported installers and release notes.

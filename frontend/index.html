@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BalloonPredictor v1.5.1</title>
+  <title>BalloonPredictor v1.5.3</title>
   <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1.4">
   <link rel="stylesheet" href="/assets/style.css">
@@ -18,7 +18,7 @@
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><svg width="30" height="35" viewBox="0 0 30 35" aria-hidden="true"><path d="M15 2C7 2 3 8 5 15c1 5 6 9 8 12h4c2-3 7-7 8-12C27 8 23 2 15 2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 5c-4 8 0 15 5 22m5-22c4 8 0 15-5 22M12 31h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Balloon<strong>Predictor</strong><span class="version">v1.5.1</span><small>ATMOSPHERIC FLIGHT LAB</small></span></div>
+    <div class="brand"><svg width="30" height="35" viewBox="0 0 30 35" aria-hidden="true"><path d="M15 2C7 2 3 8 5 15c1 5 6 9 8 12h4c2-3 7-7 8-12C27 8 23 2 15 2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 5c-4 8 0 15 5 22m5-22c4 8 0 15-5 22M12 31h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Balloon<strong>Predictor</strong><span class="version">v1.5.3</span><small>ATMOSPHERIC FLIGHT LAB</small></span></div>
     <div class="header-right"><span class="local-indicator"><i></i> Local workspace</span><button id="weather-open" class="button quiet">Manage weather <span>↗</span></button><a class="api-link" title="API documentation: run predictions and retrieve data from scripts" href="/docs" target="_blank" rel="noopener">API</a></div>
   </header>
   <main class="workspace" id="workspace">
@@ -73,7 +73,7 @@
         <div class="calculation-progress" id="calculation-progress"><span class="balloon-loader" data-balloon-loader="flight" hidden aria-hidden="true"></span><div id="flight-status" class="status-message" role="status" aria-live="polite">Ready to explore.</div></div>
         <div class="dem-recovery" id="flight-dem-action" hidden><button type="button" class="button quiet" id="flight-dem-download"></button></div>
       </form>
-      <div class="sidebar-footer">ERA5 / ERA5T / ECMWF IFS / GFS / WRF<br>Independent experimental predictor · v1.5.1</div>
+      <div class="sidebar-footer">ERA5 / ERA5T / ECMWF IFS / GFS / WRF<br>Independent experimental predictor · v1.5.3</div>
     </aside>
     <section class="visuals">
       <div class="map-toolbar">
@@ -149,7 +149,7 @@
     <div class="dialog-heading"><div><span class="eyebrow">YOUR ATMOSPHERE</span><h2>Weather library</h2></div><button id="weather-close" class="close-button" aria-label="Close weather library">×</button></div>
     <div class="weather-scroll">
     <div class="archive-paths"><p><strong>Direct local files.</strong> ERA5 and WRF volumes stay on disk; the reader loads the needed columns.</p><p id="archive-paths" class="field-note"></p><button id="rescan-weather" type="button" class="button quiet">Rescan local data ↻</button><div id="rescan-status" class="status-message" role="status"></div></div>
-    <section class="storage-panel"><h3>Weather storage &amp; cleanup</h3><p id="storage-paths" class="save-path"></p><p id="storage-config"></p><p id="storage-log"></p><form id="storage-location-form" hidden><label for="storage-location">Data folder</label><div class="storage-location-row"><input id="storage-location" type="text" required maxlength="4096" spellcheck="false"><button type="submit" class="button quiet">Save folder</button></div><p>Use an absolute path. Quit and reopen the app to use the new folder. Existing files stay where they are.</p></form><div id="storage-datasets"></div><div class="storage-actions"><button type="button" class="text-button danger-action" id="clear-cache">Clear remote file cache</button><button type="button" class="text-button danger-action" id="clear-results">Clear saved predictions &amp; exports</button></div><p>Raw cache is shared between downloads. Clearing it keeps saved weather datasets. Deleting a dataset can prevent later sampled exports from dependent predictions. Active work is protected. Stop v1.2 or older servers before cleanup.</p><p id="storage-status" role="status"></p></section>
+    <section class="storage-panel"><h3>Weather storage &amp; cleanup</h3><p id="storage-paths" class="save-path"></p><p id="storage-health" role="status"></p><button id="signout-button" type="button" class="text-button" hidden>Sign out of this server</button><p id="storage-config"></p><p id="storage-log"></p><form id="storage-location-form" hidden><label for="storage-location">Data folder</label><div class="storage-location-row"><input id="storage-location" type="text" required maxlength="4096" spellcheck="false"><button type="submit" class="button quiet">Save folder</button></div><p>Use an absolute path. Quit and reopen the app to use the new folder. Existing files stay where they are.</p></form><div id="storage-datasets"></div><div class="storage-actions"><button type="button" class="text-button danger-action" id="clear-cache">Clear remote file cache</button><button type="button" class="text-button danger-action" id="clear-results">Clear saved predictions &amp; exports</button></div><p>Raw cache is shared between downloads. Clearing it keeps saved weather datasets. Deleting a dataset can prevent later sampled exports from dependent predictions. Active work is protected. Stop v1.2 or older servers before cleanup.</p><p id="storage-status" role="status"></p></section>
     <details class="download-section"><summary>Physical high-resolution terrain</summary><p id="terrain-path" class="field-note"></p><p class="field-note">Place regional GeoTIFF DEM/DTM tiles in this folder (orthometric elevations in metres, with CRS and nodata). The finest covering pixel is used. GLO-30 is a DSM including buildings/vegetation; a local bare-earth DTM is preferable. Its EGM2008 datum may differ slightly from your local height datum.</p><div class="terrain-actions"><button type="button" class="button quiet" id="download-terrain">Download GLO-30 tile at launch point</button><button type="button" class="text-button" id="refresh-terrain">Refresh terrain list</button></div><p id="terrain-status" class="field-note" role="status"></p></details>
     <div id="dataset-list" class="dataset-list"></div>
     <details class="download-section" open><summary>Download ERA5 or operational forecasts</summary>

@@ -13,10 +13,10 @@ cleanup() {
     rm -rf -- "$work"
 }
 trap cleanup EXIT
-printf 'data_dir: %s/data\ndefault_dataset: demo\n' "$work" > "$work/config.yml"
+printf 'data_dir: %s/data\nshared_data_root: %s/users\nshared_server: true\ndefault_dataset: demo\n' "$work" "$work" > "$work/config.yml"
 python server.py --config "$work/config.yml" --port "$web" > "$work/server.log" 2>&1 &
 api_pid=$!
-python scripts/ssh-test-fixture.py "$work/ssh.json" "$web" "$ssh" > "$work/ssh.log" 2>&1 &
+python scripts/ssh-test-fixture.py "$work/ssh.json" "$web" "$ssh" "$work/users/.server-$web/identity.sock" > "$work/ssh.log" 2>&1 &
 ssh_pid=$!
 for ((i=0;i<100;i++)); do
     if [[ -f "$work/ssh.json" ]] && curl -fsS "http://127.0.0.1:$web/api/health" > /dev/null 2>&1; then break; fi
@@ -30,7 +30,7 @@ apks=("$dist"/BalloonPredictor-*-Android.apk)
 [[ ${#apks[@]} -eq 1 ]]
 adb install -r "${apks[0]}"
 adb install -r "$tests/BalloonPredictor-instrumentation.apk"
-adb shell am instrument -w -e ssh_port "$ssh" -e web_port "$web" -e fingerprint "$fingerprint" -e offline_fixture "$fixture" \
+adb shell am instrument -w -e ssh_port "$ssh" -e web_port "$web" -e fingerprint "$fingerprint" -e offline_fixture "$fixture" -e workspace_user "$(id -un)" \
   io.github.tbanyard.balloonpredictor.test/io.github.tbanyard.balloonpredictor.FlightTest | tee "$work/report"
 if ! grep -q 'BP_ANDROID_PASS:' "$work/report"; then
     cat "$work/server.log" "$work/ssh.log"

@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Sign in · BalloonPredictor</title>
+  <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
+  <link rel="stylesheet" href="/assets/session-login.css">
+  <script src="/assets/session-login.js" defer></script>
+</head>
+<body>
+  <main class="login-card">
+    <header><img src="/assets/favicon.svg" width="66" height="66" alt="">
+      <h1>Balloon<span>Predictor</span> <small>v1.5.3</small></h1>
+      <p class="eyebrow">YOUR SERVER WORKSPACE</p>
+    </header>
+    <h2>Welcome back.</h2>
+    <p class="intro">Sign in with your normal server account.</p>
+    <form id="signin-form" method="post" action="/api/login">
+      <label for="username">Username</label>
+      <input id="username" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="128" required>
+      <label for="password">Password</label>
+      <input id="password" name="password" type="password" autocomplete="current-password" maxlength="4096" required>
+      <button id="signin-button" type="submit">Sign in <span aria-hidden="true">→</span></button>
+    </form>
+    <form id="signin-challenge" method="post" action="/api/login/answer" hidden>
+      <h3>Complete your sign-in</h3><p id="challenge-text"></p><div id="challenge-fields"></div>
+      <button id="challenge-button" type="submit">Continue <span aria-hidden="true">→</span></button>
+    </form>
+    <div class="login-progress"><img id="signin-loader" src="/assets/favicon.svg" width="24" height="28" alt="" hidden>
+      <p id="signin-status" role="status" aria-live="polite"></p>
+    </div>
+    <button id="signin-cancel" type="button" class="cancel" hidden>Cancel sign-in</button>
+    <footer><p>Connect to your VPN first if required.</p><p>Your weather data and flights stay in your personal server folder.</p>
+      <span id="signin-server"></span>
+    </footer>
+  </main>
+</body>
+</html>

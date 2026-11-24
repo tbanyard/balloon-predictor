@@ -23,8 +23,10 @@ public final class FlightTest extends Instrumentation {
             MainActivity app=(MainActivity)startActivitySync(new Intent(Intent.ACTION_MAIN)
                 .setClassName(getTargetContext(),MainActivity.class.getName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitFor(()->onMain(()->app.form.getVisibility()==View.VISIBLE),"connection screen");
+            check(onMain(()->app.localChoice.getVisibility()==View.VISIBLE&&app.serverChoice.getVisibility()==View.VISIBLE),"Missing large Local/Server choices");
             AtomicInteger trusted=new AtomicInteger(),authenticated=new AtomicInteger();
             runOnMainSync(()->{
+                app.serverChoice.performClick();
                 app.mode.setSelection(1);app.host.setText("10.0.2.2");app.username.setText("fixture");
                 app.sshPort.setText(args.getString("ssh_port"));app.webPort.setText(args.getString("web_port"));
                 app.connect(new ServerSession.Prompts(){
@@ -40,6 +42,16 @@ public final class FlightTest extends Instrumentation {
             check(trusted.get()==1&&authenticated.get()>=1,"SSH did not verify the key and ask for a password");
             WebView original=onMain(()->app.web);
             waitFor(()->"true".equals(js(original,"Boolean(window.L && document.querySelector('#predict-button')?.disabled===false)")),"flight controls");
+            check("true".equals(js(original,"document.documentElement.dataset.host==='android' && getComputedStyle(document.querySelector('.topbar')).display==='none'")),"Duplicate Android header is visible");
+            check(onMain(()->app.weatherButton.getVisibility()==View.VISIBLE),"Missing native Weather action");
+            runOnMainSync(()->app.weatherButton.performClick());
+            waitFor(()->"true".equals(js(original,"document.querySelector('#weather-dialog').open")),"native Weather action");
+            js(original,"document.querySelector('#rescan-weather').click()");
+            waitFor(()->"true".equals(js(original,"document.querySelector('#rescan-status').textContent.startsWith('Server data index refreshed')")),"rescan through SSH");
+            js(original,"document.querySelector('#weather-close').click()");
+            String expected=args.getString("workspace_user");
+            js(original,"fetch('/api/storage').then(r=>r.json()).then(v=>window.__workspaceUser=v.workspace_user)");
+            waitFor(()->("\""+expected+"\"").equals(js(original,"window.__workspaceUser||''")),"verified personal workspace");
             js(original,"(()=>{document.querySelector('#flight_name').value='Keep this flight';document.querySelector('#flight_mode').value='ascent';document.querySelector('#burst_altitude').value='1000';document.querySelector('#ascent_rate').value='5';document.querySelector('#predict-button').click()})()");
             waitFor(()->"true".equals(js(original,"document.querySelector('#flight-status').textContent.startsWith('Flight complete')")),"flight");
             runOnMainSync(()->app.serverButton.performClick());
@@ -50,7 +62,7 @@ public final class FlightTest extends Instrumentation {
             runOnMainSync(()->{app.serverButton.performClick();app.onBackPressed();});
             check(onMain(()->app.web==original&&original.getVisibility()==View.VISIBLE),"Back did not return to active flight");
             runOnMainSync(()->{
-                app.serverButton.performClick();app.mode.setSelection(2);app.connect(null);
+                app.serverButton.performClick();app.localChoice.performClick();app.connect(null);
             });
             waitFor(()->onMain(()->app.web!=null&&app.web!=original),"offline WebView");
             WebView offline=onMain(()->app.web);
@@ -63,7 +75,7 @@ public final class FlightTest extends Instrumentation {
             js(offline,"document.querySelector('#calculate').click()");
             waitFor(()->"true".equals(js(offline,"document.querySelector('#result').hidden===false")),"locally calculated flight");
             check("true".equals(js(offline,"document.querySelector('#status').textContent.includes('on this phone')")),"Offline solver was not used");
-            result.putString("stream","\nBP_ANDROID_PASS: SSH login, both return paths, and an offline forecast flight.\n");
+            result.putString("stream","\nBP_ANDROID_PASS: personal SSH workspace, rescan, one header, Local/Server choices, both return paths, and an offline forecast flight.\n");
             runOnMainSync(app::finish);finish(Activity.RESULT_OK,result);
         }catch(Throwable error){
             result.putString("stream","\nBP_ANDROID_FAIL: "+android.util.Log.getStackTraceString(error));

@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.5.3
+
+- A browser username/password login replaces the manual command and timed sign-in link.
+- Sign-in uses the server's SSH authentication, including interactive verification codes, and the existing Unix identity broker to select each personal workspace.
+- Incorrect passwords can be retried on the page; cancellation and sign-out clear the active sign-in or session.
+- Preserve installed apps' automatic SSH sign-in and reconnects; web-server mode also accepts the new login page.
+- Use port 8005 consistently for the shared-server launcher, server examples and installed apps' server defaults.
+- Retain the existing BP_Data folders, local modes and data migration. Add real-SSH browser login, account-isolation and session regressions to the test workflows.
+
+## 1.5.2
+
+- Shared Linux storage at /data1/tim/BP_Data, with personal workspaces selected from verified SSH/Unix credentials.
+- Copy-and-verify migration retains old data and rebases saved prediction input paths.
+- Virtual environment, pip cache, temporary downloads and server logs stay on the data volume.
+- Disk, quota, permission and read-only errors include the storage path and errno; health and recovery routes remain readable when storage writes fail.
+- Large Local/Server start choices on Android and all desktop shells.
+- One Android header with logo, version, Weather and Server actions; the live flight is retained while choosing another connection.
+- Authenticated Android rescan regression, cross-account isolation tests, and updated installer workflows for the exact v1.5.2 commit.
+
 ## 1.5.1
 
 - One-line Trajectory toolbar with compact, endpoint-aware switches and overflow.

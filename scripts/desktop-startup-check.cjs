@@ -49,6 +49,12 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     await page.goto(info.url + '?splash=done');
     await Promise.race([firstState, delay(5000).then(() => { throw new Error('No request for controller state'); })]);
     assert.equal(await page.locator('#splash').count(), 0, 'Native splash must not play twice');
+    assert(await page.locator('#connection').isHidden(), 'Connection fields should follow the two choices');
+    for (const id of ['choose-local','choose-server']) {
+      const box=await page.locator('#'+id).boundingBox();
+      assert(box.width>140&&box.height>140, 'Start choices are not large buttons');
+    }
+    await page.click('#choose-local');
     assert(await page.locator('#connect').isDisabled(), 'Connection enabled before controller state arrived');
     await page.locator('#connection').evaluate(form => form.requestSubmit());
     assert.equal(connectRequests, 0, 'An early submit reached the controller');

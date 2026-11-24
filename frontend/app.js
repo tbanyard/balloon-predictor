@@ -26,8 +26,12 @@ function fromInput(value){return value?new Date(value+"Z").toISOString():null;}
 function duration(seconds){const m=Math.round(seconds/60);return(m>=60?Math.floor(m/60)+"h ":"")+(m%60)+"m";}
 function utcText(value){return new Date(value).toISOString().replace("T"," ").replace(".000Z"," UTC");}
 async function api(path,options){
-  const response=await fetch(path,options); let data;
-  try{data=await response.json();}catch{throw new Error("Server returned an unreadable response.");}
+  let response,data;
+  try{response=await fetch(path,options);}catch(error){
+    throw new Error("Could not reach BalloonPredictor. Check the VPN and SSH connection, and whether the server is still running. A server disk or quota error will be shown here when the server can reply.");
+  }
+  try{data=await response.json();}catch{throw new Error("The server returned HTTP "+response.status+" without readable details. Check its terminal output or the job log shown in Manage weather → Storage.");}
+  if(response.status===401&&data.login_required)location.replace("/signin");
   if(!response.ok){const d=data.detail;throw Object.assign(new Error(Array.isArray(d)?d.map(e=>e.loc.slice(1).join(".")+": "+e.msg).join("; "):d||"Request failed."),{details:data.error_details});}
   return data;
 }
@@ -413,7 +417,7 @@ $("share-button").onclick=async()=>{
   catch{history.replaceState(null,"",url);toast("Setup saved in the address bar. Copy its URL.");}
 };
 $("rescan-weather").onclick=async()=>{
-  $("rescan-weather").disabled=true;try{const job=await api("/api/weather/rescan",{method:"POST"});const r=await poll(job.id,message=>status("rescan-status",message,"working"));await loadDatasets();status("rescan-status","Local index refreshed."+(r.messages?.length?" "+r.messages.join(" · "):""));}catch(e){status("rescan-status",e.message,"error");}finally{$("rescan-weather").disabled=false;}
+  $("rescan-weather").disabled=true;try{const job=await api("/api/weather/rescan",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});const r=await poll(job.id,message=>status("rescan-status",message,"working"));await loadDatasets();status("rescan-status","Server data index refreshed."+(r.messages?.length?" "+r.messages.join(" · "):""));}catch(e){status("rescan-status",e.message,"error");}finally{$("rescan-weather").disabled=false;}
 };
 async function refreshSounding(){
   const token=++soundingToken,site=activeSite(),data=selectedResult(site);if(!data?.sounding)return;
@@ -427,7 +431,7 @@ $("sounding-open").onclick=()=>{if(window.BalloonWindows)window.BalloonWindows.s
   document.addEventListener("bp:layout",()=>requestAnimationFrame(()=>map.invalidateSize({pan:false})));
 $("sounding-close").onclick=()=>{soundingToken++;if(window.BalloonWindows)window.BalloonWindows.minimise("sounding-panel");else $("sounding-panel").hidden=true;};$("sounding-mode").onchange=refreshSounding;
 function downloadJSON(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.5.1",sites:sites.map(s=>({setup:s.setup}))});};
+$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.5.3",sites:sites.map(s=>({setup:s.setup}))});};
 $("import-session").onchange=async()=>{
   try{const file=$("import-session").files[0];if(!file)return;if(file.size>1000000)throw new Error("Setup file must be under 1 MB.");const value=JSON.parse(await file.text());if(!Array.isArray(value.sites)||!value.sites.length||value.sites.length>20)throw new Error("Setup file must contain 1–20 launch points.");const defaults=readSetup();const added=value.sites.map(item=>{if(!item.setup||typeof item.setup!=="object")throw new Error("Invalid launch setup.");const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];if(!Number.isFinite(Number(setup.launch_latitude))||Math.abs(Number(setup.launch_latitude))>85||!Number.isFinite(Number(setup.launch_longitude)))throw new Error("Invalid launch coordinates.");return newSite(setup);});sites=added;activeId=sites[0].id;writeSetup(sites[0].setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();toast("Launch setups loaded.");}catch(e){status("flight-status",e.message,"error");}finally{$("import-session").value="";}
 };
@@ -448,6 +452,11 @@ function bytes(value){return value>=1024**3?(value/1024**3).toFixed(2)+" GB":(va
 async function loadStorage(){
   const data=await api("/api/storage");
   $("storage-paths").textContent="Saved on this server: "+data.data_dir+" · Weather: "+data.weather.path+" ("+bytes(data.weather.bytes)+") · Remote file cache: "+data.cache.path+" ("+bytes(data.cache.bytes)+") · Predictions: "+data.results.path+" ("+bytes(data.results.bytes)+") · Model boxes: "+data.exports.path+" ("+bytes(data.exports.bytes)+")";
+  const health=data.health;
+  $("storage-health").textContent=health?(data.workspace_user?"Signed in as "+data.workspace_user+". ":"")+
+    (health.ok?"Writable folder. Filesystem free: "+bytes(health.filesystem_free_bytes)+". "+health.note:health.message):"";
+  $("storage-health").className=health&&!health.ok?"status-message error":"field-note";
+  $("signout-button").hidden=!data.shared_server;
   $("storage-config").textContent="Configuration on this server: "+(data.config_path||"not set")+(data.editable?"":" · The server operator can edit data_dir or set BP_DATA_DIR.");
   $("storage-log").textContent="Processing log on this server: "+(data.log_path||"see the server console");
   $("storage-location-form").hidden=!data.editable;
@@ -462,6 +471,10 @@ $("storage-location-form").onsubmit=async e=>{
     const data=await api("/api/storage/location",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({path:$("storage-location").value})});
     status("storage-status",data.restart_required?"Saved "+data.data_dir+". Quit and reopen BalloonPredictor to use it.":"The current data folder is saved.");
   }catch(error){status("storage-status",error.message,"error");}
+};
+$("signout-button").onclick=async()=>{
+  try{await api("/api/logout",{method:"POST",headers:{"Content-Type":"application/json"},body:"{}"});location.replace("/signin");}
+  catch(error){status("storage-status",error.message,"error");}
 };
 async function cleanStorage(body){try{const data=await api("/api/storage/cleanup",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});status("storage-status","Removed "+data.removed_files+" files · "+bytes(data.removed_bytes));if(body.target==="results"||body.target==="dataset"){preparedExports.clear();for(const site of sites)if(body.target==="results"||site.setup.dataset===body.name){site.result=null;site.series=null;site.jobId=null;}drawSelected();drawAllMap();}await loadDatasets();await loadStorage();}catch(e){status("storage-status",e.message,"error");}}
 $("clear-cache").onclick=()=>{if(confirm("Clear all cached remote GRIB files? Saved weather datasets and predictions are kept. Future matching downloads will fetch remote files again."))cleanStorage({target:"cache"});};

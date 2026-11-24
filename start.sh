@@ -25,10 +25,10 @@ else
     "$predictor_python" -m venv --copies "$predictor_venv"
   fi
   predictor_python="$predictor_venv/bin/python"
-  if [[ ! -f "$predictor_venv/.balloon-predictor-1.4-ready" ]]; then
+  if [[ ! -f "$predictor_venv/.balloon-predictor-1.5.3-ready" ]]; then
     "$predictor_python" -m pip install -r "$predictor_project/requirements.lock.txt"
-    touch "$predictor_venv/.balloon-predictor-1.4-ready"
+    touch "$predictor_venv/.balloon-predictor-1.5.3-ready"
   fi
 fi
-echo 'BalloonPredictor v1.5.1 · default http://127.0.0.1:8001 · Ctrl+C to stop.'
+echo 'BalloonPredictor v1.5.3 · default http://127.0.0.1:8005 · Ctrl+C to stop.'
 exec "$predictor_python" "$predictor_project/server.py" "$@"

@@ -1,7 +1,7 @@
 # API and data origins, in plain language
 
 The **API** button opens the application's interactive programming reference,
-usually at `http://127.0.0.1:8001/docs`. API means Application Programming
+usually at `http://127.0.0.1:8005/docs`. API means Application Programming
 Interface: scripts and other programs can submit predictions, list weather,
 check jobs and retrieve exports without clicking through the map interface.
 Normal interactive use does not require it.

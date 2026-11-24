@@ -2,9 +2,9 @@
 
 **The browser shows an API connection error**
 
-Run the server from the extracted directory, then open http://localhost:8001.
+Run the server from the extracted directory, then open http://localhost:8005.
 Opening frontend/index.html directly does not start the Python backend.
-If port 8001 is busy: python server.py --port 8002, then visit port 8002.
+If port 8005 is busy: python server.py --port 8002, then visit port 8002.
 
 **Missing Python modules after an interrupted installation**
 

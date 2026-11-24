@@ -1,6 +1,7 @@
 """Build the Debian 12+ amd64 desktop package with an isolated Python runtime."""
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import platform
 import shutil
@@ -93,7 +94,9 @@ Categories=Science;Education;
     package = output / f"BalloonPredictor-{VERSION}-Debian-amd64.deb"
     run("dpkg-deb", "--root-owner-group", "--build", "-Zxz", "-z3", stage, package)
     write(output / "SHA256SUMS.txt", f"{digest(package)}  {package.name}\n")
-    shutil.copy2(REPO / "docs/V1.5.md", output / "README-Linux.md")
+    source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
+    write(output / "build-info.json", json.dumps({"app_version": VERSION, "source_commit": source_commit}, indent=2) + "\n")
+    shutil.copy2(REPO / "docs/V1.5.3.md", output / "README-Linux.md")
     print(package)
 
 
