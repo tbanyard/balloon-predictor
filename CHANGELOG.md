@@ -1,5 +1,8 @@
 ## v1.6.3
 
+- Repair Windows retained-window startup by loading a real local page before waiting for WebView2.
+- Cache checksum-verified Android dependencies, use a hosted Maven mirror and fall back with bounded delayed retries.
+
 - Separate editable UTC dates and times, with a consistent explicit calendar picker.
 - Keep the flight page and calculated results alive while choosing a desktop server or returning to a flight.
 - Wider clickable tracks, selectable endpoints and a chooser for overlapping flights.

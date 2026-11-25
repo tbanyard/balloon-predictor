@@ -44,6 +44,10 @@ def test_windows_connection_retains_the_flight_view(monkeypatch, tmp_path, reuse
                     windows[0].options['menu'][0].actions[0].action()
                     chooser.presentation = {'generation': 2, 'url': flight, 'navigation': flight, 'reuse': reuse}
                 return self.calls > 2
+            # Reproduce Edge's initial empty page: navigating to the same
+            # about:blank document need not emit NavigationCompleted/loaded.
+            if self is windows[0].events.loaded:
+                return windows[0].url != 'about:blank'
             return True
 
     def create(title, url, **options):
@@ -65,7 +69,7 @@ def test_windows_connection_retains_the_flight_view(monkeypatch, tmp_path, reuse
     monkeypatch.setattr(launcher, 'time', SimpleNamespace(sleep=lambda seconds: events.append(('sleep', seconds))))
     launcher.open_window(chooser, tmp_path)
     main, connection, splash = windows
-    assert main.url == 'about:blank' and connection.url == url+'?splash=done&native=1'
+    assert main.url == url+'splash.html' and connection.url == url+'?splash=done&native=1'
     assert splash.options['transparent'] and ('sleep', 2) in events
     navigations = [e for e in events if e[:2] == (main.title, 'navigate')]
     assert len(navigations) == expected_navigations

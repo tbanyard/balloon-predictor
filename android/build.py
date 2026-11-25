@@ -1,15 +1,21 @@
 #!/usr/bin/env python3
 """Build and verify the APK using JDK 17, Android 36, and build-tools 35.0.0."""
 import argparse
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
+import http.client
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
 import tomllib
-from urllib.request import urlopen
+import time
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
 from zipfile import ZipFile, ZIP_DEFLATED
 
 HERE = Path(__file__).resolve().parent
@@ -31,16 +37,96 @@ def digest(path):
         return hashlib.file_digest(source, "sha256").hexdigest()
 
 
-def libraries(work):
+def retry_delay(headers, attempt):
+    """Honour Retry-After; never turn a long server block into rapid retries."""
+    value = headers.get("Retry-After") if headers else None
+    try:
+        delay = float(value)
+    except (ValueError, TypeError):
+        try:
+            until = parsedate_to_datetime(value)
+            if until.tzinfo is None:
+                until = until.replace(tzinfo=timezone.utc)
+            delay = (until - datetime.now(timezone.utc)).total_seconds()
+        except (ValueError, TypeError, OverflowError):
+            delay = 20 * (2 ** attempt)
+    # Do not sleep for an unbounded period, or retry earlier than requested.
+    if not math.isfinite(delay) or delay > 60:
+        if value:
+            raise RuntimeError("The dependency server requests a longer wait. Keep the dependency cache and rerun the Android job later.")
+        delay = 20 * (2 ** attempt)
+    return max(1, delay)
+
+
+def download_jar(name, url, expected, work, cache_dir=None):
+    original = work / f"{name}-download.jar"
+    cached = None
+    if cache_dir is not None:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        cached = cache_dir / (expected + ".jar")
+        if cached.is_file():
+            if digest(cached) == expected:
+                print(f"Using verified cached Android dependency: {name}", flush=True)
+                shutil.copyfile(cached, original)
+                return original
+            print(f"Discarding damaged Android dependency cache entry: {name}", flush=True)
+            cached.unlink()
+    # Use the Google-hosted Central mirror first to avoid repeated direct
+    # traffic from shared CI networks. Both sources must match the pinned hash.
+    repositories = ("https://maven-central.storage-download.googleapis.com/maven2/",
+                    "https://repo.maven.apache.org/maven2/")
+    partial = work / f"{name}-download.part"
+    for attempt in range(3):
+        repository = repositories[attempt % len(repositories)]
+        request = Request(repository + url, headers={
+            "User-Agent": f"BalloonPredictor/{VERSION} build (+https://github.com/tbanyard/balloon-predictor)",
+            "Accept": "application/octet-stream",
+        })
+        headers = None
+        try:
+            with urlopen(request, timeout=60) as source, partial.open("wb") as dest:
+                shutil.copyfileobj(source, dest)
+            if digest(partial) != expected:
+                raise RuntimeError(f"Invalid checksum for Android dependency {name}; no unverified file was cached.")
+            partial.replace(original)
+            break
+        except HTTPError as error:
+            if error.code not in {429, 500, 502, 503, 504} and not (error.code == 404 and attempt % 2 == 0):
+                raise
+            headers = error.headers
+            reason = f"HTTP {error.code} from {request.host}"
+            error.close()
+        except (URLError, TimeoutError, ConnectionError, http.client.IncompleteRead) as error:
+            reason = type(error).__name__
+        finally:
+            partial.unlink(missing_ok=True)
+        if attempt == 2:
+            raise RuntimeError(f"Android dependency {name} could not be downloaded ({reason}). "
+                               "Verified cached dependencies have been kept. Rerun the Android workflow later.")
+        delay = retry_delay(headers, attempt)
+        print(f"Android dependency {name}: {reason}; waiting {delay:g}s before retry {attempt + 2}/3.", flush=True)
+        time.sleep(delay)
+    if cached is not None:
+        # Atomic cache writes preserve valid entries if the download/build fails.
+        temp = None
+        try:
+            with tempfile.NamedTemporaryFile(prefix=".verified-", dir=cache_dir, delete=False) as output:
+                temp = Path(output.name)
+                with original.open("rb") as source:
+                    shutil.copyfileobj(source, output)
+            temp.replace(cached)
+        finally:
+            if temp is not None:
+                temp.unlink(missing_ok=True)
+    return original
+
+
+def libraries(work, cache_dir=None):
     assets = work / "assets"
     assets.mkdir()
     outputs = []
     for name, (url, expected) in JARS.items():
-        original = work / f"{name}-download.jar"
-        with urlopen("https://repo.maven.apache.org/maven2/" + url, timeout=60) as source, original.open("wb") as dest:
-            shutil.copyfileobj(source, dest)
-        if digest(original) != expected:
-            raise RuntimeError(f"Invalid checksum for Android dependency {name}")
+        original = download_jar(name, url, expected, work, cache_dir)
         output = work / f"{name}.jar"
         with ZipFile(original) as source, ZipFile(output, "w", ZIP_DEFLATED) as dest:
             for item in source.namelist():
@@ -70,7 +156,7 @@ def build(args, work):
             "-keyalg", "RSA", "-keysize", "2048", "-validity", "3650", "-dname", "CN=BalloonPredictor Test Build", env=env)
     elif not env.get("BP_APK_STORE_PASS") or not env.get("BP_APK_KEY_PASS"):
         raise RuntimeError("Set BP_APK_STORE_PASS and BP_APK_KEY_PASS for release signing.")
-    jars, assets = libraries(work)
+    jars, assets = libraries(work, args.dependency_cache)
     shutil.copytree(HERE / "offline", assets / "offline")
     shutil.copytree(ROOT / "frontend/vendor/leaflet", assets / "offline-assets/vendor/leaflet")
     shutil.copy2(ROOT / "frontend/coastlines.js", assets / "offline-assets/coastlines.js")
@@ -133,6 +219,8 @@ if __name__ == "__main__":
     parser.add_argument("--keystore", type=Path)
     parser.add_argument("--alias", default="balloon-predictor")
     parser.add_argument("--test-output", type=Path)
+    parser.add_argument("--dependency-cache", type=Path, default=os.environ.get("BP_ANDROID_DEPENDENCY_CACHE"),
+                        help="Reuse checksum-verified Maven JARs in this folder; also BP_ANDROID_DEPENDENCY_CACHE.")
     args = parser.parse_args()
     if args.sdk is None:
         parser.error("Set ANDROID_HOME or pass --sdk.")

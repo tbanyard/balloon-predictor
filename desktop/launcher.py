@@ -160,7 +160,9 @@ def open_window(chooser, root, verify=False):
         window.hide()
 
     window = webview.create_window(
-        "BalloonPredictor", "about:blank", width=1280, height=850, min_size=(760, 570), hidden=True,
+        # A real navigation is necessary: WebView2's initial about:blank can
+        # already be current, so pywebview never receives NavigationCompleted.
+        "BalloonPredictor", chooser.url + "splash.html", width=1280, height=850, min_size=(760, 570), hidden=True,
         menu=[Menu("Connection", [MenuAction("Choose server…", show_chooser)])],
     )
     connection = webview.create_window(
@@ -260,9 +262,10 @@ def open_window(chooser, root, verify=False):
         splash.events.loaded.wait(15)
         time.sleep(2)
         try:
-            for view in (window, connection):
+            for name, view in (("flight", window), ("connection", connection)):
+                LOG.info("Waiting for the Windows %s view to load.", name)
                 if not view.events.loaded.wait(30):
-                    raise RuntimeError("The Windows window did not finish loading.")
+                    raise RuntimeError(f"The Windows {name} view did not finish loading.")
                 identify(view)
             connection.show()
             splash.destroy()
