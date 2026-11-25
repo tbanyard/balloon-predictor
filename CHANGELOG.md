@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.6.2
+
+- Automatic whole-model weather coverage for regional datasets and buffered viewport loading for global/large models; remove manual area buttons and the map's weather-information box.
+- Compact Weather header with aligned window controls and no subtitle.
+- ERA5 viewer style colour controls: full-layer/visible-window 2–98% ranges and fixed limits with per-field retention.
+- Custom altitude or actual model pressure surfaces, with log-pressure interpolation, below-ground/missing-layer masks and model-height metadata.
+- Consistent launch-centred download bounds with five degrees of extra padding; confirmed windows up to 144 hours.
+- Dismissible completed-flight banner that returns its space to the workspace.
+- Default shared-server/app connection port 8007; retain per-account data and Android's working .bpforecast local calculator.
+- Prepare/release scripts for v1.6.2 and tests for the new controls, coverage, coordinates and download confirmation.
+
+## 1.6.1
+
+- Origin-only referrers for map tiles, full OSM contributor attribution and genuine installed-app User-Agent identification; preserve normal tile caching.
+- Open Weather action and Weather tab for the bold flight's saved forecast, target/burst height and selected launch time (or optional target/burst time).
+- Temperature, u, v and wind-speed fields; opacity control and geographic animated wind beneath all flight tracks.
+- Flight-area or on-demand visible-map sampling, all-fields caching, missing-data masks, source checks and guards against stale flight responses.
+- Bounded native ERA5/WRF column sampling, animation pause/reduced-motion handling and responsive controls.
+- Four-panel docking with shared dividers; retain existing layouts, login, per-account storage and default port 8005.
+- Native CI avoids public tile traffic; browser regression verifies actual headers using intercepted synthetic tiles.
+
+## 1.6.0
+
+- Corrected 45° Skew-T, model-height secondary axes, pressure-aligned wind components and conventional wind barbs.
+- Mouse/pinch/keyboard zoom, pan and reset, with optional linked vertical zoom and matching standalone SVG exports.
+- Coordinated half/quarter arrangements for open panels and shared dividers with saved ratios.
+- Confirmation protects calculated launches from accidental map clicks and marker drags.
+- Sensitivity display is inactive without members; model families and newest-first run selections replace the long weather list.
+- Aligned, rounded Local/Server cards on Android and the desktop connection screen.
+- Retain the release workflow-file lookup fix and use a local default directory for Android signing setup.
+
 ## 1.5.3
 
 - A browser username/password login replaces the manual command and timed sign-in link.

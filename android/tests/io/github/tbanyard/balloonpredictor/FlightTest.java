@@ -24,6 +24,8 @@ public final class FlightTest extends Instrumentation {
                 .setClassName(getTargetContext(),MainActivity.class.getName()).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
             waitFor(()->onMain(()->app.form.getVisibility()==View.VISIBLE),"connection screen");
             check(onMain(()->app.localChoice.getVisibility()==View.VISIBLE&&app.serverChoice.getVisibility()==View.VISIBLE),"Missing large Local/Server choices");
+            check(onMain(()->app.localChoice.getTop()==app.serverChoice.getTop()&&app.localChoice.getHeight()==app.serverChoice.getHeight()),"Local/Server cards are offset or unequal");
+            check(onMain(()->app.localChoice.getCompoundDrawables()[1].getBounds().height()==app.serverChoice.getCompoundDrawables()[1].getBounds().height()),"Connection icons are unequal");
             AtomicInteger trusted=new AtomicInteger(),authenticated=new AtomicInteger();
             runOnMainSync(()->{
                 app.serverChoice.performClick();
@@ -41,6 +43,7 @@ public final class FlightTest extends Instrumentation {
             waitFor(()->onMain(()->app.web!=null),"SSH WebView");
             check(trusted.get()==1&&authenticated.get()>=1,"SSH did not verify the key and ask for a password");
             WebView original=onMain(()->app.web);
+            check("true".equals(js(original,"navigator.userAgent.includes('BalloonPredictor/')")),"Missing app User-Agent identification");
             waitFor(()->"true".equals(js(original,"Boolean(window.L && document.querySelector('#predict-button')?.disabled===false)")),"flight controls");
             check("true".equals(js(original,"document.documentElement.dataset.host==='android' && getComputedStyle(document.querySelector('.topbar')).display==='none'")),"Duplicate Android header is visible");
             check(onMain(()->app.weatherButton.getVisibility()==View.VISIBLE),"Missing native Weather action");

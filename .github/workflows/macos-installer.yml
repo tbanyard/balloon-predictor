@@ -2,7 +2,7 @@ name: macOS installer (test)
 
 on:
   push:
-    branches: [release-v1.5.3-test]
+    branches: [release-v1.6.2-test]
   workflow_dispatch:
 
 permissions:
@@ -14,6 +14,7 @@ concurrency:
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: '1'
+  BP_TEST_BLOCK_EXTERNAL_TILES: '1'
   PYTHONDONTWRITEBYTECODE: '1'
 
 jobs:

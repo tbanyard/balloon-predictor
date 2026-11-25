@@ -15,6 +15,9 @@ def test_windows_splash_hands_off_to_the_main_window(monkeypatch, tmp_path):
     webview.menu = ModuleType("webview.menu")
     webview.menu.Menu = lambda name, actions: SimpleNamespace(name=name, actions=actions)
     webview.menu.MenuAction = lambda name, action: SimpleNamespace(name=name, action=action)
+    system = ModuleType("System")
+    system.Action = lambda callback: callback
+    monkeypatch.setitem(sys.modules, "System", system)
     for module in (webview, webview.guilib, webview.menu):
         monkeypatch.setitem(sys.modules, module.__name__, module)
 
@@ -31,6 +34,8 @@ def test_windows_splash_hands_off_to_the_main_window(monkeypatch, tmp_path):
             show=lambda: events.append((title, "show")),
             destroy=lambda: events.append((title, "destroy")),
             load_url=lambda url: events.append((title, url)),
+            native=SimpleNamespace(Invoke=lambda callback: callback(), webview=SimpleNamespace(
+                CoreWebView2=SimpleNamespace(Settings=SimpleNamespace(UserAgent="Actual Edge engine")))),
         )
         windows.append(window)
         return window
@@ -44,6 +49,7 @@ def test_windows_splash_hands_off_to_the_main_window(monkeypatch, tmp_path):
     main, splash = windows
     assert main.options["hidden"] and splash.options["transparent"]
     assert main.url == url + "?splash=done" and splash.url == url + "splash.html"
-    assert events == [(splash.title, "loaded"), ("sleep", 2), (main.title, "show"), (splash.title, "destroy")]
+    assert events == [(splash.title, "loaded"), ("sleep", 2), (main.title, "loaded"), (main.title, "show"), (splash.title, "destroy")]
+    assert main.native.webview.CoreWebView2.Settings.UserAgent.startswith("Actual Edge engine BalloonPredictor/1.6.2 ")
     main.options["menu"][0].actions[0].action()
     assert events[-1] == (main.title, main.url)

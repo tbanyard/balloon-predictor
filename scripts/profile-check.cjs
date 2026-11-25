@@ -1,0 +1,34 @@
+/* Numerical and interaction regressions for the actual shipped SVG renderer. */
+const fs=require('fs'),path=require('path'),assert=require('node:assert/strict'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<label><input id="link-profile-zoom" type="checkbox" checked></label><div><svg id="skew"></svg></div><div><svg id="wind"></svg></div>',{runScripts:'outside-only',pretendToBeVisual:true});
+const w=dom.window,$=id=>w.document.getElementById(id);
+w.eval(fs.readFileSync(path.join(__dirname,'../frontend/plots.js'),'utf8'));
+const api=w.BalloonPlots;
+const rows=Array.from({length:121},(_,i)=>{const altitude=i*250;return{altitude,pressure_hpa:1000*Math.exp(-altitude/7500),temperature_c:Math.max(-56,15-altitude*.0065),dewpoint_c:-5-altitude*.004,u:10+altitude/1800,v:-4+altitude/5000,latitude:53};});
+for(const id of['skew','wind'])$(id).getBoundingClientRect=()=>({left:0,top:0,width:id==='skew'?720:440,height:620});
+const profile={rows,humidity_available:true};let c=api.render(profile,$('skew'),$('wind'));
+const close=(a,b)=>assert.ok(Math.abs(a-b)<1e-7,`${a} differs from ${b}`);
+for(const p of[900,500,100,30])close(c.geometry('skew').Y(p),c.geometry('wind').Y(p));
+const g=c.geometry('skew');close(g.Y(1000)-g.Y(100),g.Y(100)-g.Y(10));
+close(g.X(0,500)-g.X(0,1000),g.Y(1000)-g.Y(500));
+for(const r of rows)for(const t of[r.temperature_c,r.dewpoint_c])assert.ok(g.X(t,r.pressure_hpa)>=g.left&&g.X(t,r.pressure_hpa)<=g.right,'Default view clipped a trace');
+assert.ok($('skew').querySelectorAll('[data-wind-barb]').length>=10);
+assert.equal($('wind').querySelectorAll('path[data-series]').length,2);
+const map=api.heightMapping(rows);close(map.height(1000*Math.exp(-10000/7500)),10000);close(map.pressure(10000),1000*Math.exp(-10000/7500));assert.equal(map.height(1100),null);
+let parts=api.barbParts(55*1852/3600,0);assert.equal(parts.flags,1);assert.equal(parts.full,0);assert.equal(parts.half,true);close(parts.direction,270);
+assert.equal(api.barbParts(0,0).calm,true);assert.equal(api.barbParts(10*1852/3600,0).full,1);
+const initial=JSON.stringify(c.states);$('skew').parentElement.querySelector('[data-plot-action=in]').click();
+assert.notEqual(JSON.stringify(c.states),initial);close(c.states.skew.logTop,c.states.wind.logTop);
+$('link-profile-zoom').checked=false;const skewTop=c.states.skew.logTop;$('wind').parentElement.querySelector('[data-plot-action=in]').click();close(c.states.skew.logTop,skewTop);assert.notEqual(c.states.wind.logTop,skewTop);
+$('link-profile-zoom').checked=true;$('link-profile-zoom').dispatchEvent(new w.Event('change'));close(c.states.skew.logTop,c.states.wind.logTop);
+$('skew').parentElement.querySelector('[data-plot-action=reset]').click();close(c.states.skew.logTop,JSON.parse(initial).skew.logTop);
+function pointer(type,x,y,id=1){const e=new w.MouseEvent(type,{button:0,clientX:x,clientY:y,bubbles:true});Object.defineProperty(e,'pointerId',{value:id});$('skew').dispatchEvent(e);}
+let before=c.states.skew.x0;pointer('pointerdown',300,250);pointer('pointermove',330,270);pointer('pointerup',330,270);assert.notEqual(c.states.skew.x0,before);
+const span=c.states.skew.logBottom-c.states.skew.logTop;pointer('pointerdown',220,200,1);pointer('pointerdown',400,350,2);pointer('pointermove',460,400,2);pointer('pointerup',220,200,1);pointer('pointerup',460,400,2);assert.ok(c.states.skew.logBottom-c.states.skew.logTop<span);
+for(let i=0;i<3;i++)c=api.render(profile,$('skew'),$('wind'));
+assert.equal(w.document.querySelectorAll('.plot-toolbar').length,2);
+$('skew').parentElement.querySelector('[data-plot-action=in]').click();close(c.states.skew.logBottom-c.states.skew.logTop,(JSON.parse(initial).skew.logBottom-JSON.parse(initial).skew.logTop)*.75);
+api.render({...profile,humidity_available:false,rows:rows.map(r=>({...r,dewpoint_c:null}))},$('skew'),$('wind'));assert.ok($('skew').textContent.includes('Humidity unavailable'));
+assert.ok(!$('skew').outerHTML.includes('NaN'));
+console.log('Profile plots: PASS · 45° skew, logarithmic matched axes, actual model heights, unclipped traces, wind barbs/knots, linked/independent zoom, drag, pinch, reset and clean re-render.');
+dom.window.close();

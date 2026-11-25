@@ -192,6 +192,8 @@ def open_window(url, root, verify=False):
                     time.sleep(.2)
                     continue
                 if state == "ready":
+                    if not window.evaluate_js("navigator.userAgent.includes('BalloonPredictor/')"):
+                        raise RuntimeError("The installed WebView did not identify BalloonPredictor in its User-Agent.")
                     checked.append(True)
                     LOG.info("Windows WebView2 rendered the UI with Demo weather selected.")
                     return
@@ -211,6 +213,18 @@ def open_window(url, root, verify=False):
         splash.events.loaded.wait(15)
         time.sleep(2)
         try:
+            if not window.events.loaded.wait(30):
+                raise RuntimeError("The connection screen did not finish loading.")
+            # Preserve the installed Edge engine's real identity and add ours.
+            # Invoke on WinForms' UI thread before the chooser is made visible.
+            from System import Action
+            from balloon_predictor import __version__
+            def identify():
+                settings = window.native.webview.CoreWebView2.Settings
+                suffix = f" BalloonPredictor/{__version__} (+https://github.com/tbanyard/balloon-predictor)"
+                if " BalloonPredictor/" not in settings.UserAgent:
+                    settings.UserAgent += suffix
+            window.native.Invoke(Action(identify))
             window.show()
         finally:
             splash.destroy()

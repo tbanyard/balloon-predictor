@@ -60,7 +60,7 @@ public final class MainActivity extends Activity {
         TextView title=text("BalloonPredictor",16);title.setTypeface(null,android.graphics.Typeface.BOLD);title.setGravity(Gravity.CENTER_VERTICAL);
         title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         toolbar.addView(title,new LinearLayout.LayoutParams(0,dp(44),1));
-        String version="1.5.3";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        String version="1.6.2";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         TextView versionLabel=text("v"+version,11);versionLabel.setPadding(0,0,dp(6),0);toolbar.addView(versionLabel);
         weatherButton=button("Weather",false);weatherButton.setTextSize(12);weatherButton.setVisibility(View.GONE);toolbar.addView(weatherButton);
         weatherButton.setOnClickListener(v->{if(web!=null)web.evaluateJavascript("document.querySelector('#weather-open')?.click()",null);});
@@ -91,13 +91,14 @@ public final class MainActivity extends Activity {
 
     private void buildForm(){
         form=new ScrollView(this);form.setFillViewport(true);
-        LinearLayout card=column();card.setPadding(dp(22),dp(18),dp(22),dp(28));card.setBackgroundColor(0xffffffff);
+        LinearLayout card=column();card.setPadding(dp(22),dp(22),dp(22),dp(28));card.setBackgroundColor(PAPER);
+        TextView eyebrow=text("SETUP",11);eyebrow.setLetterSpacing(.16f);eyebrow.setPadding(0,0,0,dp(10));card.addView(eyebrow);
         TextView title=text("Where would you like to work?",23);title.setTypeface(null,android.graphics.Typeface.BOLD);card.addView(title);
         card.addView(text("Choose this device or a server. Your current flight stays open while you choose.",14));
-        LinearLayout choices=new LinearLayout(this);choices.setPadding(0,dp(20),0,dp(18));card.addView(choices);
+        LinearLayout choices=new LinearLayout(this);choices.setBaselineAligned(false);choices.setGravity(Gravity.TOP);choices.setPadding(0,dp(24),0,dp(24));card.addView(choices);
         localChoice=choice("Local","On this phone",R.drawable.device);serverChoice=choice("Server","Connect securely",R.drawable.server);
-        LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,dp(165),1);left.setMarginEnd(dp(10));
-        choices.addView(localChoice,left);choices.addView(serverChoice,new LinearLayout.LayoutParams(0,dp(165),1));
+        LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-1,1);left.setMarginEnd(dp(14));
+        choices.addView(localChoice,left);choices.addView(serverChoice,new LinearLayout.LayoutParams(0,-1,1));
         connectionOptions=column();card.addView(connectionOptions);connectionOptions.setVisibility(View.GONE);
         label(connectionOptions,"Connection");mode=new Spinner(this);mode.setContentDescription("Connection method");
         ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Web server","SSH tunnel","Run locally · offline forecast"});
@@ -113,7 +114,7 @@ public final class MainActivity extends Activity {
         LinearLayout ports=new LinearLayout(this);sshFields.addView(ports);LinearLayout a=column(),b=column();
         ports.addView(a,new LinearLayout.LayoutParams(0,-2,1));ports.addView(b,new LinearLayout.LayoutParams(0,-2,1));
         sshPort=field(a,"SSH port","22",prefs.getString("ssh_port","22"),InputType.TYPE_CLASS_NUMBER);
-        webPort=field(b,"BalloonPredictor port","8005",prefs.getString("web_port","8005"),InputType.TYPE_CLASS_NUMBER);
+        webPort=field(b,"BalloonPredictor port","8007",prefs.getString("web_port","8007"),InputType.TYPE_CLASS_NUMBER);
         sshFields.addView(text("The server asks for a password or sign-in code when required. Passwords aren’t saved.",14));
         offlineHint=text("Open a saved .bpforecast file to calculate a flight on this phone. You can prepare a pack on the server before you lose signal.",14);
         connectionOptions.addView(offlineHint);
@@ -133,10 +134,30 @@ public final class MainActivity extends Activity {
     }
 
     private Button choice(String name,String detail,int icon){
-        Button result=button(name+"\n"+detail,false);result.setTextSize(18);result.setGravity(Gravity.CENTER);
-        result.setCompoundDrawablePadding(dp(12));
-        android.graphics.drawable.Drawable image=getDrawable(icon);image.setBounds(0,0,dp(42),dp(42));
+        int accent=icon==R.drawable.device?ORANGE:0xff216f63;
+        Button result=new ChoiceButton(accent);result.setAllCaps(false);result.setTextColor(INK);result.setTextSize(13);result.setGravity(Gravity.CENTER);
+        android.text.SpannableString caption=new android.text.SpannableString(name+"\n"+detail);
+        caption.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD),0,name.length(),0);
+        caption.setSpan(new android.text.style.RelativeSizeSpan(1.6f),0,name.length(),0);result.setText(caption);
+        result.setMinHeight(dp(225));result.setMinimumHeight(dp(225));result.setMinWidth(0);result.setMinimumWidth(0);
+        result.setPadding(dp(8),dp(30),dp(8),dp(26));result.setIncludeFontPadding(false);result.setCompoundDrawablePadding(dp(30));
+        android.graphics.drawable.StateListDrawable states=new android.graphics.drawable.StateListDrawable();
+        for(boolean selected:new boolean[]{true,false}){android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();shape.setColor(0xffffffff);shape.setCornerRadius(dp(25));shape.setStroke(dp(selected?2:1),selected?accent:0xffd7e1db);states.addState(selected?new int[]{android.R.attr.state_selected}:new int[]{},shape);}
+        result.setBackgroundTintList(null);result.setBackground(states);result.setElevation(dp(3));
+        android.graphics.drawable.GradientDrawable badge=new android.graphics.drawable.GradientDrawable();badge.setColor(icon==R.drawable.device?0xfffbece3:0xffe0f0ec);badge.setCornerRadius(dp(28));
+        android.graphics.drawable.LayerDrawable image=new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{badge,getDrawable(icon)});
+        image.setLayerInset(1,dp(22),dp(22),dp(22),dp(22));image.setBounds(0,0,dp(88),dp(88));
         result.setCompoundDrawables(null,image,null,null);result.setContentDescription(name+" · "+detail);return result;
+    }
+    private final class ChoiceButton extends Button {
+        final int accent;
+        ChoiceButton(int color){super(MainActivity.this);accent=color;}
+        @Override protected void onDraw(android.graphics.Canvas canvas){super.onDraw(canvas);if(!isSelected())return;
+            android.graphics.Paint paint=new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);paint.setColor(accent);
+            float x=getWidth()-dp(22),y=dp(22);canvas.drawCircle(x,y,dp(10),paint);
+            paint.setColor(0xffffffff);paint.setStrokeWidth(dp(2));paint.setStyle(android.graphics.Paint.Style.STROKE);paint.setStrokeCap(android.graphics.Paint.Cap.ROUND);paint.setStrokeJoin(android.graphics.Paint.Join.ROUND);
+            android.graphics.Path tick=new android.graphics.Path();tick.moveTo(x-dp(4),y);tick.lineTo(x-dp(1),y+dp(3));tick.lineTo(x+dp(5),y-dp(4));canvas.drawPath(tick,paint);
+        }
     }
     private void chooseMode(boolean local){
         int saved=prefs.getInt("mode",1);mode.setSelection(local?2:saved==0?0:1);
@@ -218,6 +239,8 @@ public final class MainActivity extends Activity {
         status.setText("Opening flight workspace…");
         WebView view=new WebView(this);pendingWeb=view;pendingSession=candidate;
         view.getSettings().setJavaScriptEnabled(true);view.getSettings().setDomStorageEnabled(true);
+        String appVersion="1.6.2";try{appVersion=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        view.getSettings().setUserAgentString(view.getSettings().getUserAgentString()+" BalloonPredictor/"+appVersion+" (+https://github.com/tbanyard/balloon-predictor)");
         view.getSettings().setAllowFileAccess(false);
         // Offline HTML and scripts are bundled; it can read a forecast the
         // user chose with the system document picker.

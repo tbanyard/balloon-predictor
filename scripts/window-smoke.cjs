@@ -89,4 +89,56 @@ for(const mode of ['move','resize']){
  const old={ratio:.55,'sounding-panel':{x:100,y:40,w:510,h:420,locked:true,minimised:false,docked:false}};const r=rig(old,true);
  try{assert.deepEqual(r.geom(r.$('sounding-panel')),{left:100,top:40,width:510,height:420});assert.equal(r.$('sounding-panel').dataset.locked,'true');assert.equal(r.$('sounding-panel').hidden,false);checks++;}finally{r.dom.window.close();}
 }
-console.log(`Window interaction regression: PASS · ${checks} scenarios (halves/quarters, magnets/release, controls, menus, locks, restore, mobile, migration)`);
+check('Three panels fill a half plus opposite quarters',({$,arrange,geom})=>{
+ $('restore-sounding').disabled=false;$('restore-sounding').click();arrange('sounding-panel','right');
+ assert.deepEqual(geom($('sounding-panel')),{left:504,top:8,width:488,height:684});
+ assert.deepEqual(geom($('map-panel')),{left:8,top:8,width:488,height:338});
+ assert.deepEqual(geom($('profile-panel')),{left:8,top:354,width:488,height:338});
+ assert.equal($('window-area').querySelectorAll('.tree-divider').length,2);
+});
+check('Both shared dividers resize adjoining panels',({$,arrange,geom,pointer})=>{
+ $('restore-sounding').disabled=false;$('restore-sounding').click();arrange('sounding-panel','right');
+ const root=$('window-area').querySelector('[data-split-path=root]');assert.equal(root.getAttribute('aria-orientation'),'vertical');
+ pointer(root,'pointerdown',500,300);pointer(root,'pointermove',650,300);pointer(root,'pointerup',650,300);
+ assert.ok(geom($('map-panel')).width>600);assert.equal(geom($('profile-panel')).width,geom($('map-panel')).width);
+ const profile=geom($('sounding-panel')),cross=$('window-area').querySelector('[data-split-path=roota]');
+ pointer(cross,'pointerdown',300,350);pointer(cross,'pointermove',300,450);pointer(cross,'pointerup',300,450);
+ assert.ok(geom($('map-panel')).height>400);assert.deepEqual(geom($('sounding-panel')),profile);
+});
+check('One other window fills the opposite half',({$,arrange,geom})=>{
+ $('map-panel').querySelector('[aria-label="Minimise Flight Map panel"]').click();
+ $('restore-sounding').disabled=false;$('restore-sounding').click();arrange('sounding-panel','right');
+ assert.equal($('map-panel').hidden,true);assert.deepEqual(geom($('profile-panel')),{left:8,top:8,width:488,height:684});
+ assert.equal($('window-area').querySelectorAll('.tree-divider').length,1);
+});
+check('Locked other panel keeps its position and shared split disables on lock',({$,arrange,geom,w})=>{
+ $('map-panel').querySelector('.window-button').click();const before=geom($('map-panel'));
+ $('restore-sounding').disabled=false;$('restore-sounding').click();arrange('sounding-panel','right');assert.deepEqual(geom($('map-panel')),before);
+ $('profile-panel').querySelector('.window-button').click();const divider=$('window-area').querySelector('.tree-divider');
+ assert.equal(divider.getAttribute('aria-disabled'),'true');const g=geom($('profile-panel'));
+ divider.dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowLeft',bubbles:true}));assert.deepEqual(geom($('profile-panel')),g);
+});
+check('Quarter docking makes the remaining panels fit without overlap',({$,arrange,geom})=>{
+ $('restore-sounding').disabled=false;$('restore-sounding').click();arrange('sounding-panel','top-right');
+ assert.deepEqual(geom($('map-panel')),{left:8,top:8,width:488,height:684});
+ assert.deepEqual(geom($('profile-panel')),{left:504,top:354,width:488,height:338});
+});
+{
+ const first=rig();let saved,expected;
+ try{first.$('restore-sounding').disabled=false;first.$('restore-sounding').click();first.arrange('sounding-panel','left');saved=JSON.parse(first.w.localStorage.getItem('balloon-predictor-window-layout-v1.4'));expected=first.geom(first.$('map-panel'));}finally{first.dom.window.close();}
+ const restored=rig(saved);try{assert.deepEqual(restored.geom(restored.$('map-panel')),expected);assert.equal(restored.$('window-area').querySelectorAll('.tree-divider').length,2);checks++;}finally{restored.dom.window.close();}
+}
+check('Four panels tile without overlap, with three shared dividers',({$,arrange,geom})=>{
+ $('restore-sounding').disabled=false;$('restore-weather').disabled=false;$('restore-sounding').click();$('restore-weather').click();
+ for(const zone of ['right','left','top','bottom','top-right','bottom-left']){
+  arrange('weather-panel',zone);const boxes=['map-panel','profile-panel','sounding-panel','weather-panel'].map(id=>geom($(id)));
+  assert.equal($('window-area').querySelectorAll('.tree-divider').length,3);
+  for(let i=0;i<boxes.length;i++)for(let j=i+1;j<boxes.length;j++){const a=boxes[i],b=boxes[j];assert.ok(a.left+a.width<=b.left||b.left+b.width<=a.left||a.top+a.height<=b.top||b.top+b.height<=a.top);}
+ }
+});
+check('Weather defaults hidden, supports mobile and reset',({$,w,mobile})=>{
+ assert.equal($('weather-panel').hidden,true);$('restore-weather').disabled=false;$('restore-weather').click();assert.equal($('weather-panel').hidden,false);
+ mobile(true);w.BalloonWindows.show('weather-panel');assert.equal($('weather-panel').hidden,false);assert.equal($('map-panel').hidden,true);
+ w.BalloonWindows.show('map-panel');assert.equal($('weather-panel').hidden,true);mobile(false);w.BalloonWindows.reset();assert.equal($('weather-panel').hidden,true);
+});
+console.log(`Window interaction regression: PASS · ${checks} scenarios (coordinated docking, both dividers, halves/quarters, magnets, controls, locks, restore, mobile, migration)`);

@@ -1,3 +1,31 @@
+# Validation for v1.6
+
+Local Python 3.12 checks pass **137 tests** with two Unix-socket tests skipped
+because this workspace prohibits AF_UNIX binding. Both remain mandatory in
+GitHub's Linux checks. The prediction engine and authentication behavior are
+covered by the retained suite; no weather-provider account was used here.
+
+New Node regressions exercise the actual SVG renderer's 45-degree transform,
+logarithmic pressure, matching pressure/height axes, bracketing-only model-height
+interpolation, initial trace visibility, barb units/direction, independent and
+linked zoom, dragging, pinch/reset and listener cleanup. The moist guide remains
+checked against MetPy's documented numerical example.
+
+The window suite now covers 19 scenarios, including three-panel coordinated
+tiling, both shared separators, locking, one remaining panel and persisted
+layouts. Chromium checks include the real map confirmation flows, model/run
+selection and ordering, profile controls, pixel alignment and connection cards
+at desktop and phone widths, along with the earlier data/export/login checks.
+
+The kit's VALIDATION.json records APK compilation, release-script simulations
+and any remaining native checks. Windows/macOS/Debian installation, Android
+emulator execution and full Unix-socket broker tests must pass in GitHub Actions
+before publication. No physical-device test is claimed from this workspace.
+
+Earlier records follow as historical information.
+
+---
+
 # Validation for v1.5.3
 
 Local Python 3.12 validation passes **131 tests**, with **two Unix-socket tests

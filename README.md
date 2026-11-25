@@ -1,15 +1,17 @@
-# BalloonPredictor v1.5.3
+# BalloonPredictor v1.6.2
 
-See [v1.5.3 and the shared server setup](docs/V1.5.3.md), including the browser login page, personal workspaces and the Local/Server start screen.
+See [v1.6.2 and the shared server setup](docs/V1.6.2.md), including automatic weather coverage, colour range controls, altitude/pressure levels, 144-hour downloads and personal workspaces.
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
-Runs on your computer at **http://localhost:8005**. On the shared Linux server, use
-`bash start-shared-server.sh --port 8005` after stopping the old server.
+Runs on your computer at **http://localhost:8007**. On the shared Linux server, use
+`bash start-shared-server.sh --port 8007` after stopping the old server.
 This uses `/data1/tim/BP_Data/<SSH username>` for each person's workspace.
 The launcher puts its virtual environment, temporary files and pip cache on the same data volume.
-Open the server's port 8005 in your browser and sign in with your normal server
+Open the server's port 8007 in your browser and sign in with your normal server
 username and password. There is no command or timed link to generate.
+
+v1.6.2 expands the Weather panel to the available model box or a buffered map view, adds automatic/fixed colour ranges and custom altitude/pressure, permits confirmed downloads up to 144 hours, and lets the completed status banner be dismissed. OSM request identification remains corrected. v1.6 adds a corrected Skew-T with wind barbs, matched pressure/altitude axes and zoom; coordinated docking with shared dividers; confirmation before moving calculated launches; grouped weather runs; and a refreshed connection dashboard.
 
 Start with [QUICKSTART.md](QUICKSTART.md). Version 1.4 gives the panels consistent
 names, clearer ground settings, an orange balloon loading animation, independent
@@ -41,7 +43,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-v1.5.3 directory. Initial installation needs internet
+the extracted balloon-predictor-v1.6.2 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 On Linux with `/data1/tim/BP_Data` mounted, generated data defaults to a username
@@ -71,7 +73,7 @@ To run the server from source, use PowerShell:
 
 If your PowerShell policy blocks the script, use the manual commands below.
 The scripts install the tested dependency snapshot on the first run and then
-start the server. Open **http://localhost:8005** and click **Calculate flight**
+start the server. Open **http://localhost:8007** and click **Calculate flight**
 to use the selected ERA5 archive. To try without local data, choose
 **Demo · synthetic winds** explicitly. Press Ctrl+C to stop the server.
 
@@ -237,7 +239,7 @@ allows 00/12 forecasts to 360 h and 06/18 forecasts to 144 h, with available
 3 h/6 h steps. ECMWF's open-data portal retains recent cycles for a short period;
 for older cycles, import your archived files instead.
 
-Each download/import is limited to 72 hours for remote requests. The configured
+Remote downloads can cover up to 144 hours, with confirmation required above 72 hours. The configured
 materialized weather limit is 2048 MB. This applies to downloaded/cropped
 imports. Direct ERA5/WRF readers do not materialize weather volumes; use them
 for large source files. See docs/WRF.md for cache and geometry memory details.
@@ -369,7 +371,7 @@ balloon-predictor predict examples/flight-demo.yml --output data/results/demo-fl
 The output prefix produces .json, .csv, .geojson and .kml files. API predictions
 are also saved in data/results/ and remain exportable after a server restart.
 
-API reference: **http://localhost:8005/docs**
+API reference: **http://localhost:8007/docs**
 
 | Endpoint | Purpose |
 |---|---|
@@ -388,7 +390,7 @@ for every Tawhiri endpoint, profile or error schema.
 Example:
 
 ~~~bash
-curl -X POST http://localhost:8005/predict \
+curl -X POST http://localhost:8007/predict \
   -H "Content-Type: application/json" \
   -d '{"dataset":"demo","launch_datetime":"2024-01-15T12:00:00Z","launch_latitude":52.817208,"launch_longitude":355.875,"launch_altitude":100,"ascent_rate":2,"burst_altitude":25000,"descent_rate":5}'
 ~~~

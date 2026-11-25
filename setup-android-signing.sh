@@ -29,7 +29,7 @@ if "$found"; then
 fi
 command -v openssl >/dev/null || { printf 'Install openssl first.\n' >&2; exit 1; }
 umask 077
-key_dir="${BP_SIGNING_DIR:-/data1/tim/BP_Data/.android-signing}"
+key_dir="${BP_SIGNING_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/balloon-predictor/android-signing}"
 mkdir -p -- "$key_dir"
 [[ ! -L "$key_dir" && -O "$key_dir" ]] || { printf 'The signing folder is not owned by this account.\n' >&2; exit 1; }
 chmod 700 "$key_dir"
@@ -48,4 +48,4 @@ fi
 tr -d '\r\n' < "$password" | gh secret set BP_ANDROID_STORE_PASSWORD --repo "$repo"
 tr -d '\r\n' < "$password" | gh secret set BP_ANDROID_KEY_PASSWORD --repo "$repo"
 base64 < "$key" | tr -d '\n' | gh secret set BP_ANDROID_KEYSTORE --repo "$repo"
-printf 'Saved the stable Android signing key in GitHub secrets.\nKeep a private backup of %s and its password.\nRun prepare-v1.5.3.sh next.\n' "$key"
+printf 'Saved the stable Android signing key in GitHub secrets.\nKeep a private backup of %s and its password.\nRun prepare-v1.6.2.sh next.\n' "$key"

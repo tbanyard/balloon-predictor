@@ -35,7 +35,7 @@ def local_login(path):
 
 def main():
     parser = argparse.ArgumentParser(description="Print a personal sign-in link after logging into the server with SSH.")
-    parser.add_argument("--port", type=int, default=8005)
+    parser.add_argument("--port", type=int, default=8007)
     parser.add_argument("--shared-root", type=Path, default=Path("/data1/tim/BP_Data"))
     args = parser.parse_args()
     try:

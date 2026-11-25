@@ -231,6 +231,8 @@ static NSString *const nativeArch = @"x86_64";
     }
     self.origin = origin;
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
+    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.2";
+    config.applicationNameForUserAgent = [NSString stringWithFormat:@"BalloonPredictor/%@ (+https://github.com/tbanyard/balloon-predictor)", version];
     if (self.testRoot) config.websiteDataStore = WKWebsiteDataStore.nonPersistentDataStore;
     self.web = [[WKWebView alloc] initWithFrame:self.window.contentView.bounds configuration:config];
     self.web.navigationDelegate = self;
@@ -266,6 +268,7 @@ static NSString *const nativeArch = @"x86_64";
         @"  return window.__bpLocal ? 'opening local mode' : 'waiting for the connection screen to be ready';"
         @"}"
         @"const button = document.querySelector('#predict-button');"
+        @"if (!navigator.userAgent.includes('BalloonPredictor/')) return 'error: Missing app identification';"
         @"if (!window.__bpTestStarted) {"
         @"if (!window.L || document.querySelector('#dataset')?.value !== 'demo' || button?.disabled !== false)"
         @"  return 'waiting for the flight controls';"

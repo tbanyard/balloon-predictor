@@ -24,7 +24,7 @@ The startup log is **%LOCALAPPDATA%\BalloonPredictor\BalloonPredictor.log**.
 
 ## Building and testing
 
-The Windows installer workflow runs on a push to **release-v1.5.3-test**.
+The Windows installer workflow runs on a push to **release-v1.6.2-test**.
 It builds a per-user x64 installer for Windows 11 and Windows 10 22H2.
 The workflow installs it into a path with spaces, launches the installed
 app with its bundled Python and WebView2, exercises synthetic GRIB, terrain

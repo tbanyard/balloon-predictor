@@ -54,6 +54,13 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
       const box=await page.locator('#'+id).boundingBox();
       assert(box.width>140&&box.height>140, 'Start choices are not large buttons');
     }
+    for(const width of[390,1100]){
+      await page.setViewportSize({width,height:860});
+      const a=await page.locator('#choose-local').boundingBox(),b=await page.locator('#choose-server').boundingBox();
+      assert(Math.abs(a.y-b.y)<1&&Math.abs(a.height-b.height)<1,'Connection cards are offset');
+      assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'Connection screen overflows');
+      if(process.env.BP_TEST_OUTPUT){fs.mkdirSync(process.env.BP_TEST_OUTPUT,{recursive:true});await page.screenshot({path:path.join(process.env.BP_TEST_OUTPUT,'connection-'+width+'.png'),fullPage:true});}
+    }
     await page.click('#choose-local');
     assert(await page.locator('#connect').isDisabled(), 'Connection enabled before controller state arrived');
     await page.locator('#connection').evaluate(form => form.requestSubmit());

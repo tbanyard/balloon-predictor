@@ -15,13 +15,13 @@ if ($env:CONDA_PREFIX -or $env:VIRTUAL_ENV) {
         & $BootstrapPython -m venv --copies $PredictorEnvironment
         if ($LASTEXITCODE -ne 0) { throw "Could not create the environment." }
     }
-    $Ready = Join-Path $PredictorEnvironment ".balloon-predictor-1.5.3-ready"
+    $Ready = Join-Path $PredictorEnvironment ".balloon-predictor-1.6.2-ready"
     if (-not (Test-Path $Ready)) {
         & $PredictorPython -m pip install -r requirements.lock.txt
         if ($LASTEXITCODE -ne 0) { throw "Dependency installation failed." }
         New-Item $Ready -ItemType File -Force | Out-Null
     }
 }
-Write-Host "BalloonPredictor v1.5.3 · default http://127.0.0.1:8005 · Ctrl+C to stop."
+Write-Host "BalloonPredictor v1.6.2 · default http://127.0.0.1:8007 · Ctrl+C to stop."
 & $PredictorPython "$PSScriptRoot\server.py" @args
 exit $LASTEXITCODE

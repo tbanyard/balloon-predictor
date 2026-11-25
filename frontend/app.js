@@ -14,11 +14,12 @@ if(window.ERA5Coastlines){
   for(const line of window.ERA5Coastlines.lines) L.polyline(line.points.map(([lon,lat])=>[lat,lon]),{color:"#8c9f91",weight:.75,interactive:false}).addTo(coastLayer);
   map.attributionControl.addAttribution("Natural Earth coastlines");
 }
-const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',maxZoom:18,crossOrigin:true}).addTo(map);
+const tiles=L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png",{attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',maxZoom:18,crossOrigin:true,referrerPolicy:"origin",updateWhenIdle:true,keepBuffer:1}).addTo(map);
 tiles.on("tileerror",()=>map.getContainer().setAttribute("data-tiles","unavailable"));
 const flightLayer=L.layerGroup().addTo(map), coverageLayer=L.layerGroup().addTo(map), siteLayer=L.layerGroup().addTo(map);
 const launchMarker=L.marker([52.817208,-4.125],{draggable:true,icon:L.divIcon({className:"launch-icon",iconSize:[18,18],iconAnchor:[9,9]})}).addTo(map).bindTooltip("Active launch point · drag to move",{direction:"top"});
-function status(id,message,kind=""){ $(id).textContent=message; $(id).className="status-message "+kind;if(id==="flight-status")$("mobile-flight-status").textContent=message; }
+function status(id,message,kind=""){ $(id).textContent=message; $(id).className="status-message "+kind;if(id==="flight-status"){const changed=$("mobile-flight-status").textContent!==message;$("mobile-flight-status").textContent=message;$("dismiss-flight-status").hidden=running;if(changed||kind==="error"||running)$("workspace-progress").hidden=false;} }
+$("dismiss-flight-status").onclick=()=>{if(!running){$("workspace-progress").hidden=true;document.dispatchEvent(new CustomEvent("bp:layout"));}};
 function toast(message){ $("toast").textContent=message; $("toast").hidden=false; clearTimeout(toastTimer); toastTimer=setTimeout(()=>$("toast").hidden=true,3500); }
 function utcInput(value){return new Date(value).toISOString().slice(0,19);}
 function minuteInput(value,ceil=false){const t=new Date(value).getTime();return new Date((ceil?Math.ceil(t/60000):Math.floor(t/60000))*60000).toISOString().slice(0,16);}
@@ -36,9 +37,10 @@ async function api(path,options){
   return data;
 }
 async function poll(id,update){for(;;){const job=await api("/api/jobs/"+id);update(job.message,job.status);if(job.status==="failed")throw Object.assign(new Error(job.error),{details:job.error_details});if(job.status==="completed")return job.result;await new Promise(resolve=>setTimeout(resolve,500));}}
+const weatherOverlay=BalloonWeather.create(map,api,{showMap:()=>window.BalloonWindows?.show("map-panel")});
 function activeSite(){return sites.find(s=>s.id===activeId);}
 function readSetup(){return Object.fromEntries(setupFields.map(key=>[key,$(key).type==="checkbox"?$(key).checked:$(key).value]));}
-function writeSetup(setup){for(const key of setupFields)if(setup[key]!==undefined){if($(key).type==="checkbox")$(key).checked=Boolean(setup[key]);else $(key).value=setup[key];}}
+function writeSetup(setup){if(setup.dataset!==undefined&&datasets.length)weatherSelectors(setup.dataset);for(const key of setupFields)if(setup[key]!==undefined){if($(key).type==="checkbox")$(key).checked=Boolean(setup[key]);else $(key).value=setup[key];}}
 function persist(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({version:1,activeId,sites:sites.map(s=>({id:s.id,setup:s.setup}))}));}catch{}}
 function saveCurrent(){const site=activeSite();if(site)site.setup=readSetup();persist();}
 function newSite(setup){return{id:globalThis.crypto?.randomUUID?.()||String(Date.now())+Math.random(),setup:{...setup},revision:0,result:null,series:null,jobId:null,selectedIndex:0,batchSiteIndex:0};}
@@ -61,8 +63,24 @@ function setLocation(lat,lon,invalidate=true){
   $("launch_latitude").value=lat.toFixed(6);$("launch_longitude").value=lon.toFixed(6);launchMarker.setLatLng([lat,lon]);
   if(invalidate)invalidatePrediction();
 }
-map.on("click",e=>setLocation(e.latlng.lat,e.latlng.lng));
-launchMarker.on("dragend",()=>{const p=launchMarker.getLatLng();setLocation(p.lat,p.lng);});
+let pendingLaunchMove=null;
+function requestLocation(lat,lon){
+  const site=activeSite();if(!site)return;
+  const previous=[Number(site.setup.launch_latitude),Number(site.setup.launch_longitude)];
+  launchMarker.setLatLng(previous);
+  if(Math.abs(lat-previous[0])<.000001&&Math.abs(((lon-previous[1]+540)%360)-180)<.000001)return;
+  if(!site.result&&!site.series&&!running){setLocation(lat,lon);return;}
+  pendingLaunchMove={id:site.id,lat,lon,revision:site.revision};
+  $("move-launch-dialog").returnValue="cancel";
+  $("move-launch-description").textContent='Move “'+(site.setup.flight_name||"this launch point")+'” to '+lat.toFixed(5)+'°, '+lon.toFixed(5)+'°? Its current calculation and sensitivity tracks will be cleared.';
+  $("move-launch-dialog").showModal();
+}
+$("move-launch-dialog").addEventListener("close",()=>{
+  const move=pendingLaunchMove;pendingLaunchMove=null;
+  if($("move-launch-dialog").returnValue==="move"&&move&&activeId===move.id&&activeSite()?.revision===move.revision)setLocation(move.lat,move.lon);
+});
+map.on("click",e=>requestLocation(e.latlng.lat,e.latlng.lng));
+launchMarker.on("dragend",()=>{const p=launchMarker.getLatLng();requestLocation(p.lat,p.lng);});
 for(const key of ["launch_latitude","launch_longitude"])$(key).addEventListener("change",()=>{
   const latitude=$("launch_latitude"),longitude=$("launch_longitude");
   if(!latitude.validity.valid||!longitude.validity.valid)return;
@@ -99,6 +117,29 @@ $("flight-form").addEventListener("change",()=>{updateFields();invalidatePredict
 function addSite(duplicate){saveCurrent();if(sites.length>=20){toast("Up to 20 launch points can be saved.");return;}const setup={...activeSite().setup,flight_name:"Launch "+(sites.length+1)};if(!duplicate)setup.launch_longitude=String(Number(setup.launch_longitude)+.1);const site=newSite(setup);sites.push(site);switchSite(site.id);}
 $("add-flight").onclick=()=>addSite(false);$("duplicate-flight").onclick=()=>addSite(true);
 $("remove-flight").onclick=()=>{if(sites.length<=1)return;const id=activeId;sites=sites.filter(s=>s.id!==id);activeId=sites[0].id;writeSetup(sites[0].setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();};
+const weatherFamilies={era5:"ERA5",era5t:"ERA5T",wrf:"WRF",ifs:"IFS",gfs:"GFS",custom:"Other files",demo:"Demo"};
+function weatherItems(){return [...datasets,{id:"online-ifs",source:"ifs",label:"Download a new IFS forecast…",online:true},{id:"online-gfs",source:"gfs",label:"Download a new GFS forecast…",online:true}];}
+function weatherFamily(info){return Object.hasOwn(weatherFamilies,info?.source)?info.source:"custom";}
+function runTime(info){const p=info.provenance||{};const value=p.cycle||info.cycle||info.run||p.run||info.start;const time=Date.parse(String(value||"").replace(/_(\d\d):/,"T$1:"));return Number.isFinite(time)?time:-Infinity;}
+function weatherOrder(a,b){return Number(Boolean(a.online))-Number(Boolean(b.online))||runTime(b)-runTime(a)||String(a.label).localeCompare(String(b.label),undefined,{numeric:true})||a.id.localeCompare(b.id);}
+function runLabel(info){
+  if(info.online)return info.label;
+  const cycle=info.provenance?.cycle||info.cycle||info.run||info.provenance?.run;
+  if(cycle&&Number.isFinite(runTime(info)))return new Date(runTime(info)).toISOString().slice(0,16).replace("T"," ")+" UTC"+(info.domain?" · d"+info.domain:"")+" · "+info.label;
+  return info.id==="era5"?"Local model-level archive":info.source==="demo"?"Synthetic atmosphere":(info.start?utcText(info.start)+" · ":"")+info.label;
+}
+function weatherSelectors(selected,requestedFamily=null){
+  const items=weatherItems(),info=items.find(d=>d.id===selected),family=requestedFamily||weatherFamily(info),source=$("weather-source");
+  source.replaceChildren(...Object.entries(weatherFamilies).filter(([key])=>items.some(d=>weatherFamily(d)===key)).map(([key,label])=>new Option(label,key)));
+  source.value=family;
+  const choices=items.filter(d=>weatherFamily(d)===family).sort(weatherOrder);
+  $("dataset").replaceChildren(...choices.map(d=>new Option(runLabel(d),d.id)));
+  $("dataset").value=choices.some(d=>d.id===selected)?selected:choices[0]?.id||"";
+  $("dataset").title=runLabel(choices.find(d=>d.id===$("dataset").value)||{label:"Choose a run"});
+  $("dataset-run-field").hidden=family==="demo"||(family.startsWith("era5")&&choices.length<=1);
+  $("dataset-run-label").textContent=family.startsWith("era5")?"Archive / saved subset":"Run / saved forecast";
+}
+$("weather-source").onchange=()=>{weatherSelectors(null,$("weather-source").value);datasetChanged(true);};
 function coverageText(info){
   if(info.source==="demo")return"Synthetic winds · any date · flat terrain";
   if(info.native&&!info.available)return"No local files available · "+info.root+" · open Manage weather to rescan or download.";
@@ -109,21 +150,20 @@ async function loadDatasets(selectId){
   const response=await api("/api/weather");datasets=response.datasets;
   $("archive-paths").textContent="ERA5: "+response.defaults.era5_root+" · WRF: "+response.defaults.wrf_root+" · column cache: "+response.defaults.cache_mb+" MB. Edit config.yml to change these paths.";
   const defaultId=datasets.some(d=>d.id===response.defaults.dataset)?response.defaults.dataset:"demo";
-  const selected=selectId||$("dataset").value||defaultId;$("dataset").replaceChildren();$("dataset-list").replaceChildren();
+  const selected=selectId||$("dataset").value||defaultId;$("dataset-list").replaceChildren();
   for(const info of [...datasets.filter(i=>i.id==="era5"),...datasets.filter(i=>i.id!=="era5"&&i.id!=="demo"),...datasets.filter(i=>i.id==="demo")]){
-    const option=document.createElement("option");option.value=info.id;option.textContent=info.label;$("dataset").append(option);
     const card=document.createElement("div");card.className="dataset-card";
     const tag=document.createElement("span");tag.className="source-tag";tag.textContent=info.source;
     const text=document.createElement("div"),name=document.createElement("strong"),desc=document.createElement("small");name.textContent=info.label;desc.textContent=coverageText(info);text.append(name,desc);
-    const use=document.createElement("button");use.type="button";use.className="text-button";use.textContent="Use dataset →";use.onclick=()=>{$("dataset").value=info.id;datasetChanged(true);invalidatePrediction();$("weather-dialog").close();};
+    const use=document.createElement("button");use.type="button";use.className="text-button";use.textContent="Use dataset →";use.onclick=()=>{weatherSelectors(info.id);datasetChanged(true);invalidatePrediction();$("weather-dialog").close();};
     card.append(tag,text,use);$("dataset-list").append(card);
   }
-  for(const [value,label] of [["online-ifs","Online · ECMWF operational IFS…"],["online-gfs","Online · NOAA GFS…"]]){const option=document.createElement("option");option.value=value;option.textContent=label;$("dataset").append(option);}
-  $("dataset").value=datasets.some(d=>d.id===selected)||["online-ifs","online-gfs"].includes(selected)?selected:defaultId;datasetChanged(false);
+  weatherSelectors(weatherItems().some(d=>d.id===selected)?selected:defaultId);datasetChanged(false);
 }
 let timesToken=0;
 function datasetChanged(adjustDate){
   ++timesToken;
+  const selectedWeather=weatherItems().find(d=>d.id===$("dataset").value);if(selectedWeather)$("dataset").title=runLabel(selectedWeather);
   const online=$("dataset").value.startsWith("online-");$("ground-button").disabled=online;
   $("predict-button").disabled=running||online||!sites.length;
   if(online){$("coverage").textContent="Download this operational forecast, then it will be selected for predictions.";$("available-days-field").hidden=true;$("model-badge").textContent=$("dataset").value.endsWith("gfs")?"GFS · ONLINE":"ECMWF IFS · ONLINE";if(adjustDate)prepareForecast($("dataset").value.slice(7));return;}
@@ -239,13 +279,15 @@ $("flight-form").onsubmit=async e=>{
   }catch(error){
     status("flight-status",error.message,"error");
     if(chosen.includes(activeSite())&&chosen.every((site,i)=>site.revision===revisions[i]))setDemRecovery(error.details);
-  }finally{running=false;window.BalloonUI?.predictionBusy(false);$("predict-button").disabled=$("dataset").value.startsWith("online-");}
+  }finally{running=false;$("dismiss-flight-status").hidden=false;window.BalloonUI?.predictionBusy(false);$("predict-button").disabled=$("dataset").value.startsWith("online-");}
 };
 function unwrapped(points){let previous=null;return points.map(p=>{let lon=p.longitude;if(previous!==null)lon=previous+((lon-previous+540)%360-180);previous=lon;return[p.latitude,lon];});}
 function allFlights(){return sites.flatMap((site,si)=>site.series?siteEntries(site).filter(e=>e.status==="completed").map(e=>({site,si,index:e.index,result:e.result})):site.result?[{site,si,index:0,result:site.result}]:[]);}
 function endpoint(data){return preferredEndpoint==="burst"||!data.summary.landing?data.summary.burst:data.summary.landing;}
 function drawAllMap(){
   flightLayer.clearLayers();siteLayer.clearLayers();
+  const sensitive=allFlights().some(entry=>entry.result.ensemble?.length>0);
+  $("sensitivity-display").set($("sensitivity-display").value,!sensitive);
   const coordinated=new Map();
   let showDots=false,showRegion=false;
   for(const entry of allFlights())if(entry.site.series?.schedule_type==="coordinated"){if(!coordinated.has(entry.site.jobId))coordinated.set(entry.site.jobId,[]);coordinated.get(entry.site.jobId).push(entry);}
@@ -257,7 +299,7 @@ function drawAllMap(){
     const p=endpoint(data),longitude=BPSensitivity.longitudeNear(p.longitude,map.getCenter().lng);
     L.circleMarker([p.latitude,longitude],{radius:selected?6:3.5,color:selected?"white":color,weight:1.5,fillColor:selected?"#d75b2c":color,fillOpacity:.9}).addTo(flightLayer).bindTooltip(document.createTextNode((p===data.summary.burst?(data.summary.landing?"Burst":"Target"):"Landing")+" · "+Math.round(p.altitude).toLocaleString()+" m · "+utcText(p.datetime)));
     const members=data.ensemble||[];
-    if($("sensitivity-display").value==="region"&&members.length>=2){
+    if($("sensitivity-display").value==="region"&&members.length>0){
       showRegion=true;
       const ring=BPSensitivity.endpointRegion({...p,longitude},members.map(endpoint));
       L.polygon(ring,{color,weight:2,opacity:.24,fillOpacity:.21,smoothFactor:0,lineJoin:"round"}).addTo(flightLayer)
@@ -311,7 +353,7 @@ function drawSelected(){
   const packAvailable=result&&["era5","era5t","gfs","ifs"].includes(result.weather.source)&&result.weather.native!==true;
   offline.disabled=!packAvailable||offline.dataset.working===packKey;
   if(offline.dataset.flight!==packKey){offline.dataset.flight=packKey;$("offline-pack-status").replaceChildren();}
-  $("exports").hidden=!jobId;$("flight-result").hidden=!result;$("empty-result").hidden=Boolean(result);$("sounding-open").disabled=!result?.sounding;$("restore-sounding").disabled=!result?.sounding;updateSondeLink();
+  $("exports").hidden=!jobId;$("flight-result").hidden=!result;$("empty-result").hidden=Boolean(result);$("sounding-open").disabled=!result?.sounding;$("restore-sounding").disabled=!result?.sounding;$("restore-weather").disabled=!result;$("weather-overlay-open").disabled=!result;weatherOverlay.setFlight(result?{jobId,flightIndex:site.series?site.selectedIndex:0,flight:result}:null);updateSondeLink();
   document.querySelectorAll("[data-format]").forEach(link=>{link.href="/api/predictions/"+jobId+"/export/"+link.dataset.format;link.setAttribute("download","");});
   if(!result){soundingToken++;$("sounding-panel").hidden=true;$("sounding-panel").classList.remove("open");$("altitude-chart").replaceChildren();return;}
   const s=result.summary,p=endpoint(result);$("metric-endpoint-label").textContent=p===s.burst?(s.landing?"BURST":"TARGET"):"LANDING";
@@ -375,11 +417,28 @@ function prepareForecast(source){
   }
   $("download-start").value=minuteInput(start);$("download-end").value=minuteInput(end,true);
   const lat=Number($("launch_latitude").value),lon=(Number($("launch_longitude").value)+540)%360-180;
-  for(const[id,value]of Object.entries({"area-n":Math.min(90,lat+5),"area-s":Math.max(-90,lat-5),"area-w":Math.max(-180,lon-8),"area-e":Math.min(180,lon+8)}))$(id).value=value.toFixed(2);
+  defaultDownloadArea(true);updateDownloadLength();
   $("download-name").value=source+"-"+start.toISOString().slice(0,16).replace(/[-:T]/g,"")+"-"+Date.now().toString(36).slice(-4);
   $("weather-dialog").showModal();loadStorage().catch(e=>status("storage-status",e.message,"error"));loadTerrain().catch(e=>status("terrain-status",e.message,"error"));
 }
-$("weather-open").onclick = async () => { $("weather-dialog").showModal(); try { await loadDatasets(); await loadStorage(); await loadTerrain(); } catch(e){status("weather-status",e.message,"error");} };
+let downloadAreaKey=null,downloadAreaEdited=false;
+function defaultDownloadArea(force=false){
+  const lat=Number($("launch_latitude").value),lon=(Number($("launch_longitude").value)+540)%360-180;
+  if(!Number.isFinite(lat)||!Number.isFinite(lon))return;
+  const key=[activeId,lat,lon].join(":");if(!force&&key===downloadAreaKey&&downloadAreaEdited)return;
+  for(const[id,value]of Object.entries({"area-n":Math.min(90,lat+10),"area-s":Math.max(-90,lat-10),"area-w":Math.max(-180,lon-13),"area-e":Math.min(180,lon+13)}))$(id).value=value.toFixed(3);
+  downloadAreaKey=key;downloadAreaEdited=false;
+}
+for(const id of ["area-n","area-w","area-s","area-e"])$(id).addEventListener("input",()=>{downloadAreaEdited=true;});
+$("download-launch-area").onclick=()=>defaultDownloadArea(true);
+function downloadLength(){const first=fromInput($("download-start").value),last=fromInput($("download-end").value);return first&&last?(new Date(last)-new Date(first))/3600000:0;}
+function updateDownloadLength(){const hours=downloadLength(),note=$("download-length-note");note.classList.toggle("long-download",hours>72);note.textContent=hours>144?"Maximum 144 hours per dataset. Shorten the requested window.":hours>72?hours.toFixed(1)+" hours requested. This is a larger download; you will be asked to confirm before it starts.":"Up to 144 hours per dataset; windows over 72 hours ask for confirmation.";}
+for(const id of ["download-start","download-end"])$(id).addEventListener("input",updateDownloadLength);
+async function confirmLargeDownload(hours){
+  const dialog=$("large-download-dialog");$("large-download-description").textContent="This request covers "+Number(hours.toFixed(2))+" hours. It may use more time, bandwidth and disk space than a download of 72 hours or less. Continue?";dialog.returnValue="";
+  return new Promise(resolve=>{dialog.addEventListener("close",()=>resolve(dialog.returnValue==="download"),{once:true});dialog.showModal();});
+}
+$("weather-open").onclick = async () => { defaultDownloadArea();updateDownloadLength();$("weather-dialog").showModal(); try { await loadDatasets(); await loadStorage(); await loadTerrain(); } catch(e){status("weather-status",e.message,"error");} };
 $("weather-close").onclick = () => $("weather-dialog").close();
 $("download-source").onchange = () => {
   const source = $("download-source").value;
@@ -389,8 +448,9 @@ $("download-source").onchange = () => {
   else if(source === "era5t") { start=new Date();start.setUTCDate(start.getUTCDate()-7);start.setUTCHours(0,0,0,0);end=new Date(start.getTime()+12*3600000); }
   else { start=new Date("2024-01-15T12:00:00Z");end=new Date("2024-01-16T00:00:00Z"); }
   $("download-start").value=minuteInput(start);$("download-end").value=minuteInput(end,true);
-  $("download-name").value=source+"-uk-"+start.toISOString().slice(0,10).replaceAll("-","");
-  $("source-note").textContent = forecast ? (source==="ifs"?"ECMWF IFS Open Data · fixed 0.25° grid: global selected fields, cropped locally. Pressure levels are sparse between 100, 50 and 10 hPa; trajectories use interpolation.":"NOAA GFS 0.25°: regional NOMADS subsets, including winds, temperature, humidity, heights and vertical motion.")+" No API key is needed. Choose a window covering the entire flight (or the earliest coordinated launch through arrival), up to 72 hours. Recent runs only; downloads are cached." : source==="era5t" ? "ERA5T is preliminary reanalysis, usually at least five days behind real time. CDS returns the available release by date; older periods may already be final." : "ERA5 is historical data. Your CDS credentials stay on the server. Accept the pressure-level and single-level dataset terms before downloading.";
+  $("download-name").value=source+"-"+start.toISOString().slice(0,10).replaceAll("-","");
+  $("source-note").textContent = forecast ? (source==="ifs"?"ECMWF IFS Open Data · fixed 0.25° grid: global selected fields, cropped locally. Pressure levels are sparse between 100, 50 and 10 hPa; trajectories use interpolation.":"NOAA GFS 0.25°: regional NOMADS subsets, including winds, temperature, humidity, heights and vertical motion.")+" No API key is needed. Choose a window covering the entire flight (or the earliest coordinated launch through arrival), up to 144 hours (confirmation over 72). Recent runs only; downloads are cached." : source==="era5t" ? "ERA5T is preliminary reanalysis, usually at least five days behind real time. CDS returns the available release by date; older periods may already be final." : "ERA5 is historical data. Your CDS credentials stay on the server. Accept the pressure-level and single-level dataset terms before downloading.";
+  updateDownloadLength();
 };
 $("weather-form").onsubmit = async e => {
   e.preventDefault(); $("download-button").disabled=true;
@@ -400,6 +460,8 @@ $("weather-form").onsubmit = async e => {
       area:["area-n","area-w","area-s","area-e"].map(id=>Number($(id).value)),grid:["ifs","gfs"].includes($("download-source").value)?.25:Number($("download-grid").value),
       surface:$("download-surface").checked,refresh:$("download-refresh").checked};
     if(["ifs","gfs"].includes(body.source)&&$("download-cycle").value)body.cycle=fromInput($("download-cycle").value);
+    const hours=downloadLength();if(hours>144)throw new Error("Download at most 144 hours per dataset. Shorten this window.");
+    if(hours>72){if(!await confirmLargeDownload(hours)){status("weather-status","Download cancelled before it started.");return;}body.confirm_large_download=true;}
     $("weather-balloon").hidden=false;
     status("weather-status","Starting download…","working");
     const job=await api("/api/weather/download",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
@@ -426,12 +488,14 @@ async function refreshSounding(){
   $("sounding-popout").href="/assets/sounding.html?job="+site.jobId+"&"+query;$("sounding-csv").href=base+"/export/csv?"+query;
   try{const profile=mode==="ascent"?data.sounding:await api(base+"?"+query);if(token!==soundingToken||$("sounding-panel").hidden)return;window.BalloonPlots.render(profile,$("skewt-chart"),$("uv-chart"));$("sounding-note").textContent=profile.description+(profile.humidity_available?" Dew point from model humidity.":" Humidity is absent: temperature and winds only.");}catch(e){if(token===soundingToken)$("sounding-note").textContent=e.message;}
 }
+$("weather-overlay-open").onclick=()=>{window.BalloonWindows?.show("weather-panel");weatherOverlay.enable();};
+document.addEventListener("bp:panelshown",event=>{if(event.detail.id==="weather-panel")weatherOverlay.enable();});
 $("sounding-open").onclick=()=>{if(window.BalloonWindows)window.BalloonWindows.show("sounding-panel");else $("sounding-panel").hidden=false;refreshSounding();};
   document.addEventListener("bp:panelshown",event=>{if(event.detail.id==="sounding-panel"&&result?.sounding)refreshSounding();});
-  document.addEventListener("bp:layout",()=>requestAnimationFrame(()=>map.invalidateSize({pan:false})));
+  document.addEventListener("bp:layout",()=>requestAnimationFrame(()=>{if(!$("map-panel").hidden)map.invalidateSize({pan:true,animate:false,debounceMoveend:true});}));
 $("sounding-close").onclick=()=>{soundingToken++;if(window.BalloonWindows)window.BalloonWindows.minimise("sounding-panel");else $("sounding-panel").hidden=true;};$("sounding-mode").onchange=refreshSounding;
 function downloadJSON(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.5.3",sites:sites.map(s=>({setup:s.setup}))});};
+$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.6.2",sites:sites.map(s=>({setup:s.setup}))});};
 $("import-session").onchange=async()=>{
   try{const file=$("import-session").files[0];if(!file)return;if(file.size>1000000)throw new Error("Setup file must be under 1 MB.");const value=JSON.parse(await file.text());if(!Array.isArray(value.sites)||!value.sites.length||value.sites.length>20)throw new Error("Setup file must contain 1–20 launch points.");const defaults=readSetup();const added=value.sites.map(item=>{if(!item.setup||typeof item.setup!=="object")throw new Error("Invalid launch setup.");const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];if(!Number.isFinite(Number(setup.launch_latitude))||Math.abs(Number(setup.launch_latitude))>85||!Number.isFinite(Number(setup.launch_longitude)))throw new Error("Invalid launch coordinates.");return newSite(setup);});sites=added;activeId=sites[0].id;writeSetup(sites[0].setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();toast("Launch setups loaded.");}catch(e){status("flight-status",e.message,"error");}finally{$("import-session").value="";}
 };

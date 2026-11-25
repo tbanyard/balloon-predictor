@@ -96,7 +96,7 @@ Categories=Science;Education;
     write(output / "SHA256SUMS.txt", f"{digest(package)}  {package.name}\n")
     source_commit = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip()
     write(output / "build-info.json", json.dumps({"app_version": VERSION, "source_commit": source_commit}, indent=2) + "\n")
-    shutil.copy2(REPO / "docs/V1.5.3.md", output / "README-Linux.md")
+    shutil.copy2(REPO / "docs/V1.6.md", output / "README-Linux.md")
     print(package)
 
 

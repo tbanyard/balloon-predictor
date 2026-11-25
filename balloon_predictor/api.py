@@ -19,7 +19,7 @@ from . import __version__
 from .errors import MissingTerrainError, PredictorError
 from .disk import check_writable, disk_status, storage_failure
 from .exports import arrival_csv_export, csv_export, geojson, kml_export
-from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest, SondeExportRequest
+from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest, SondeExportRequest, WeatherOverlayRequest
 from .storage import activity, inventory, cleanup, StorageLeaseMiddleware
 from .context import flight_weather
 from .provenance import validate_manifest
@@ -159,6 +159,15 @@ def create_app(settings=None, executor=None):
     app.state.edit_storage_location = False
     app.add_middleware(StorageLeaseMiddleware, settings=settings)
 
+    if os.environ.get("BP_TEST_BLOCK_EXTERNAL_TILES") == "1":
+        # Installed-app CI exercises coastlines and the model overlay without
+        # sending automated tile traffic to a volunteer-run public service.
+        @app.middleware("http")
+        async def offline_test_images(request, call_next):
+            response = await call_next(request)
+            response.headers["Content-Security-Policy"] = "img-src 'self' data: blob:"
+            return response
+
     @app.exception_handler(OSError)
     async def io_error(request: Request, exc: OSError):
         detail = storage_failure(exc, settings.data_dir)
@@ -272,6 +281,12 @@ def create_app(settings=None, executor=None):
         elif flight_index != 0:
             raise HTTPException(404, "This prediction contains only flight index 0.")
         return result
+
+    @app.post("/api/predictions/{job_id}/weather-overlay", status_code=202)
+    def weather_overlay(job_id: str, body: WeatherOverlayRequest):
+        from .weather_overlay import sample_overlay
+        result = selected_result(job_id, body.flight_index)
+        return jobs.submit("weather-overlay", lambda progress: sample_overlay(result, body, store, progress))
 
     @app.get("/api/predictions/{job_id}/sonde.nc")
     def sonde_export(job_id: str, flight_index: int = Query(default=0, ge=0), scope: str = "ascent"):
@@ -471,7 +486,7 @@ def configured_app():
     settings = Settings.load()
     if settings.shared_server:
         from .multiuser import SharedServer
-        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8005")))
+        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8007")))
     return create_app(settings)
 
 

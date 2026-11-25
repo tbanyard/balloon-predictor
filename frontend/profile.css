@@ -1,0 +1,16 @@
+/* v1.6 profiles and workspace refinements. Equal SVG scale aligns pressure rows. */
+.sounding-plots{display:grid!important;grid-template-columns:minmax(0,720fr) minmax(0,440fr)!important;gap:14px;align-items:start}
+.sounding-plots>div{min-width:0}.sounding-plots h3{margin:8px 0;min-height:20px;font-size:12px}
+.sounding-plots svg{width:100%;height:auto!important;max-height:none!important;display:block;overflow:hidden;background:#fff}
+.plot-toolbar{min-height:38px;display:flex;align-items:center;gap:4px;margin-bottom:3px;flex-wrap:wrap}
+.plot-toolbar .button{font:inherit;font-size:11px;min-height:28px;padding:3px 9px}.plot-toolbar span{font-size:9px;color:var(--muted);margin-left:3px}
+.interactive-profile{touch-action:none;cursor:grab}.interactive-profile:focus-visible{outline:2px solid var(--orange);outline-offset:-2px}.plot-panning{cursor:grabbing}
+.profile-link-zoom{display:inline-flex;align-items:center;gap:5px;font-size:11px!important;margin:0!important;white-space:nowrap}.profile-link-zoom input{width:auto!important;accent-color:var(--orange)}
+.profile-plot-note{font-size:10px;line-height:1.6;color:var(--muted);margin:7px 0}
+.weather-selectors{display:grid;grid-template-columns:minmax(85px,.7fr) minmax(0,1.3fr);gap:8px;align-items:end}.weather-selectors>div{min-width:0}.weather-selectors select{width:100%;min-width:0;text-overflow:ellipsis}.weather-selectors:has(#dataset-run-field[hidden]){grid-template-columns:1fr}
+.move-launch-dialog{padding:26px;border:1px solid var(--line);border-radius:16px;max-width:min(440px,calc(100vw - 30px));color:var(--ink);box-shadow:0 18px 65px #163c3030}.move-launch-dialog h2{font-size:21px;margin:10px 0}.move-launch-dialog p{font-size:13px;line-height:1.7}.dialog-actions{display:flex;flex-wrap:wrap;gap:9px;justify-content:flex-end;margin-top:22px}.move-launch-dialog::backdrop{background:#173d3455}
+.tree-divider{z-index:6}.vertical-divider{cursor:col-resize}.vertical-divider:after{top:45%;bottom:45%;left:3px;right:auto;width:2px;height:auto}
+.sounding-panel .window-body{container-type:inline-size}
+@container(max-width:600px){.sounding-plots{grid-template-columns:1fr!important;gap:16px}.sounding-plots svg#uv-chart{max-height:650px!important}.plot-toolbar{min-height:35px}}
+@media(max-width:700px){.sounding-page .sounding-plots{grid-template-columns:1fr!important}.sounding-page .sounding-plots #uv-chart{max-height:650px!important}}
+@media print{.plot-toolbar,.profile-link-zoom{display:none!important}.sounding-plots{grid-template-columns:minmax(0,720fr) minmax(0,440fr)!important}}

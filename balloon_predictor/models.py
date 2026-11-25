@@ -8,6 +8,31 @@ class StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid", allow_inf_nan=False)
 
 
+class WeatherOverlayRequest(StrictModel):
+    flight_index: int = Field(default=0, ge=0)
+    time_basis: Literal["launch", "target"] = "launch"
+    area: tuple[float, float, float, float] | None = None
+    coverage: Literal["auto", "requested"] = "requested"
+    altitude_m: float | None = Field(default=None, ge=-500, le=100000)
+    pressure_hpa: float | None = Field(default=None, gt=0, le=1100)
+    grid_size: int = Field(default=40, ge=8, le=48)
+
+    @model_validator(mode="after")
+    def one_vertical_coordinate(self):
+        if self.altitude_m is not None and self.pressure_hpa is not None:
+            raise ValueError("Choose an altitude or a pressure level, not both.")
+        return self
+
+    @field_validator("area")
+    @classmethod
+    def map_area(cls, value):
+        if value is not None:
+            north, west, south, east = value
+            if not (-85 <= south < north <= 85 and -540 <= west < east <= 540 and east-west <= 360+1e-7):
+                raise ValueError("Map area must be [north, west, south, east], within 85° latitude and at most 360° wide. Longitudes may continue across the date line.")
+        return value
+
+
 class PredictionRequest(StrictModel):
     dataset: str = "demo"
     launch_datetime: datetime
@@ -101,11 +126,12 @@ class DownloadRequest(StrictModel):
     name: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
     start: datetime
     end: datetime
-    area: tuple[float, float, float, float] = (60, -12, 48, 5)
+    area: tuple[float, float, float, float] = (65, -17, 43, 10)
     grid: float = Field(default=0.25, ge=0.25, le=2)
     cycle: datetime | None = None
     surface: bool = True
     refresh: bool = False
+    confirm_large_download: bool = False
 
     @field_validator("start", "end", "cycle")
     @classmethod
@@ -120,8 +146,11 @@ class DownloadRequest(StrictModel):
     def validate_window(self):
         if self.end <= self.start:
             raise ValueError("End must be after start.")
-        if (self.end - self.start).total_seconds() > 72 * 3600:
-            raise ValueError("Download at most 72 hours per dataset; use several datasets for longer studies.")
+        hours = (self.end - self.start).total_seconds() / 3600
+        if hours > 144:
+            raise ValueError("Download at most 144 hours per dataset; use several datasets for longer studies.")
+        if hours > 72 and not self.confirm_large_download:
+            raise ValueError("Downloads longer than 72 hours need confirmation. Set confirm_large_download=true to accept the larger download, up to 144 hours.")
         n, w, s, e = self.area
         if not (-90 <= s < n <= 90 and -180 <= w < e <= 180):
             raise ValueError("Area is [north, west, south, east]; use a non-dateline-crossing area.")

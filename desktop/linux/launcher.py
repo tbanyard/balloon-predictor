@@ -51,6 +51,9 @@ class App:
         self.context = WebKit2.WebContext.new_with_website_data_manager(manager)
         self.context.connect("download-started", self.on_download)
         self.web = WebKit2.WebView.new_with_context(self.context)
+        from balloon_predictor import __version__
+        self.web.get_settings().set_user_agent_with_application_details(
+            "BalloonPredictor", __version__ + " (+https://github.com/tbanyard/balloon-predictor)")
         self.web.connect("decide-policy", self.navigate)
         self.web.connect("load-failed", self.load_failed)
         self.window.add(self.web)
@@ -188,7 +191,7 @@ class App:
                 window.__bpFlight=true;document.querySelector('#flight_mode').value='ascent';
                 document.querySelector('#burst_altitude').value='1000';document.querySelector('#ascent_rate').value='5';button.click();
             }
-            return document.querySelector('#flight-status').textContent.startsWith('Flight complete');
+            return navigator.userAgent.includes('BalloonPredictor/') && document.querySelector('#flight-status').textContent.startsWith('Flight complete');
         })()"""
         def finished(view, result, _):
             try:

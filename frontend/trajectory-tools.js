@@ -6,7 +6,7 @@
   const $=id=>document.getElementById(id);
   const buttons=$("trajectory-inline"), menu=$("trajectory-menu"), more=$("trajectory-more");
   const tools=[
-    [$("trajectory-panels"),280],[$("trajectory-reset"),715],[$("trajectory-toggles"),625],[$("trajectory-actions"),880]
+    [$("trajectory-panels"),340],[$("trajectory-reset"),770],[$("trajectory-toggles"),690],[$("trajectory-actions"),950]
   ];
   function open(value,restore=false){
     menu.hidden=!value;more.setAttribute("aria-expanded",String(value));
@@ -59,7 +59,7 @@
       button.setAttribute("aria-checked",String(value===values[1]));
       button.disabled=disabled;
       const selected=group.querySelector(value===values[1]?"[data-right]":"[data-left]").getAttribute("aria-label");
-      group.title=group.getAttribute("aria-label")+": "+selected+(disabled?" · only applies to full flights":"");
+      group.title=group.getAttribute("aria-label")+": "+selected+(disabled?(id==="sensitivity-display"?" · calculate a flight with sensitivity members to enable":" · only applies to full flights"):"");
       button.title=group.title;
     };
     button.onclick=()=>{

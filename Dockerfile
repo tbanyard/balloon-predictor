@@ -8,5 +8,5 @@ RUN pip install --no-cache-dir --no-deps -e . \
     && useradd --create-home --uid 1000 balloon \
     && chown -R balloon:balloon /app
 USER balloon
-EXPOSE 8005
-CMD ["python", "-m", "balloon_predictor", "serve", "--host", "0.0.0.0", "--port", "8005"]
+EXPOSE 8007
+CMD ["python", "-m", "balloon_predictor", "serve", "--host", "0.0.0.0", "--port", "8007"]

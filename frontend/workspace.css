@@ -30,7 +30,7 @@
 .window-button{border:1px solid #e1e5df;color:#62746a;background:#f7f9f4;padding:4px 7px;border-radius:5px;font-size:10px;line-height:1.3;min-height:28px;display:inline-flex;align-items:center;justify-content:center;min-width:28px}
 .window-button:hover{border-color:#dca886;color:#b34b20}.window-button[aria-pressed=true]{color:#a34a20;border-color:#e0bb9f;background:#fff5eb}
 .window-button svg{display:block}.window-moving{box-shadow:0 10px 40px #283d3030!important}
-#profile-panel,#sounding-panel{display:flex;flex-direction:column;max-height:none;overflow:hidden}
+#profile-panel,#sounding-panel,#weather-panel{display:flex;flex-direction:column;max-height:none;overflow:hidden}
 .window-body{flex:1;min-height:0;overflow:auto;padding-right:6px;overscroll-behavior:contain;scrollbar-gutter:stable}
 .result-header{flex-wrap:wrap;position:relative;padding:7px 0;background:#fff;z-index:2;align-items:center;flex-shrink:0}
 .result-header>.window-controls{order:2}.result-header>.export-buttons{margin-left:auto}
@@ -135,3 +135,30 @@ details>summary{list-style:none;display:flex;align-items:center;justify-content:
 /* The Android shell supplies the logo, version, Weather and Server actions. */
 :root[data-host=android] .topbar{display:none}
 :root[data-host=android] .workspace{height:100dvh}
+
+/* Fixed-time weather controls; raster and wind panes are below all tracks. */
+.weather-flight{font-size:13px;font-weight:600;line-height:1.5;margin:10px 0;color:var(--teal,#28645a)}
+.weather-show,.weather-flow{display:flex;justify-content:flex-start;gap:8px;align-items:center;font-size:13px;margin:13px 0}
+.weather-overlay-controls{display:grid;gap:14px;margin:18px 0}.weather-overlay-controls>label:not(.weather-flow){display:grid;justify-content:stretch;gap:7px;font-size:12px;color:#52665e}.weather-overlay-controls select{width:100%;min-width:0}
+.weather-overlay-controls input[type=range]{width:100%;accent-color:var(--orange,#d65d30);cursor:pointer}.weather-overlay-controls output{float:right;font-variant-numeric:tabular-nums}
+.weather-overlay-actions{display:flex;flex-wrap:wrap;gap:9px;margin:12px 0}.weather-overlay-actions button{font-size:11px}
+.weather-overlay-meta{font-size:12px;line-height:1.6;color:#52665e;white-space:pre-line}.weather-overlay-legend{margin:18px 0;padding:12px;border:1px solid #dce2d9;border-radius:8px;font-size:12px}
+#weather-legend-colours{height:12px;border-radius:4px;margin:9px 0 4px}.weather-legend-values{display:flex;justify-content:space-between;font-variant-numeric:tabular-nums}
+.weather-wind-canvas{position:absolute;pointer-events:none}.weather-overlay-loading::before{content:"";display:inline-block;width:12px;height:17px;margin-right:7px;vertical-align:middle;background:center/contain no-repeat url('/assets/favicon.svg');animation:balloon-float 1.3s ease-in-out infinite alternate}
+@media(prefers-reduced-motion:reduce){.weather-overlay-loading::before{animation:none}}
+
+
+.weather-show input,.weather-flow input{width:16px;height:16px;min-height:16px;padding:0;flex:0 0 16px;accent-color:var(--orange,#d65d30)}
+.weather-opacity-label{display:flex;justify-content:space-between;color:inherit;font-weight:600}.weather-overlay-controls input[type=range]{min-height:22px;padding:0}
+
+.weather-heading{padding:4px 0 9px;background:white;min-height:38px}.weather-heading>.window-controls{align-self:center}
+.weather-level-controls,.weather-limit-fields{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:12px}
+.weather-level-controls label,.weather-colour-options label{display:grid;justify-content:stretch;gap:7px;font-size:12px;color:#52665e;margin:0}
+.weather-level-controls input:disabled{opacity:.5;cursor:not-allowed;background:#f0f2ee}.weather-level-controls label>span{color:inherit;font-weight:600}
+.weather-colour-options{margin:18px 0;border-top:1px solid #e1e5df;padding-top:12px}.weather-colour-options summary{cursor:pointer;color:#62746a;font-size:12px;margin-bottom:12px}
+.weather-colour-options select{margin-bottom:12px}.weather-limit-fields{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+#weather-range-error:empty{display:none}#weather-range-error{color:#a64720}
+.dismiss-flight-status{flex:0 0 26px;margin-left:auto;align-self:center;background:transparent;border:0;border-radius:5px;color:#a65b2c;font-size:20px;line-height:1;min-width:26px;min-height:26px;padding:2px;cursor:pointer}.dismiss-flight-status:hover{background:#f4e5d7}
+#download-length-note.long-download{padding:9px 12px;background:#fff4e7;border:1px solid #e8c59c;border-radius:6px;color:#8b4c25;margin:8px 0 12px}
+
+#workspace-progress[hidden]{display:none!important}
