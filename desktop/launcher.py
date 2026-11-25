@@ -139,103 +139,154 @@ def serve(root, port):
                 LOG.warning("Local server did not stop before the shutdown timeout.")
 
 
-def open_window(url, root, verify=False):
+def open_window(chooser, root, verify=False):
     import webview
     from webview.menu import Menu, MenuAction
-
-    # The Inno installer provides this runtime if needed. Fail explicitly if
-    # the renderer fell back to the legacy Internet Explorer engine.
     from webview.guilib import initialize
-    renderer = initialize("edgechromium")
-    if renderer.renderer != "edgechromium":
+
+    if initialize("edgechromium").renderer != "edgechromium":
         raise RuntimeError("Microsoft Edge WebView2 Runtime is missing. Re-run BalloonPredictor Setup.")
     webview.settings["ALLOW_DOWNLOADS"] = True
     webview.settings["ALLOW_FILE_URLS"] = False
     webview.settings["OPEN_EXTERNAL_LINKS_IN_BROWSER"] = True
-    chooser_url = url + "?splash=done"
+    chooser_url = chooser.url + "?splash=done&native=1"
+    current = {"url": None, "generation": 0, "closing": False}
+
+    def show_chooser():
+        # Only the small connection page is reloaded. The flight DOM, its plots,
+        # zoom and selections stay in the separate, hidden WebView2 window.
+        connection.load_url(chooser_url)
+        connection.show()
+        window.hide()
+
     window = webview.create_window(
-        "BalloonPredictor", chooser_url, width=1280, height=850, min_size=(760, 570), hidden=True,
-        menu=[Menu("Connection", [MenuAction("Choose server…", lambda: window.load_url(chooser_url))])],
+        "BalloonPredictor", "about:blank", width=1280, height=850, min_size=(760, 570), hidden=True,
+        menu=[Menu("Connection", [MenuAction("Choose server…", show_chooser)])],
+    )
+    connection = webview.create_window(
+        "BalloonPredictor · Connection", chooser_url, width=1280, height=850, min_size=(760, 570), hidden=True,
     )
     splash = webview.create_window(
-        "Starting BalloonPredictor", url + "splash.html", width=330, height=300,
+        "Starting BalloonPredictor", chooser.url + "splash.html", width=330, height=300,
         frameless=True, transparent=True, easy_drag=False, resizable=False, on_top=True,
     )
 
-    checked = []
+    def close_connection():
+        if current["url"] and not current["closing"]:
+            def return_to_flight():
+                window.show()
+                connection.hide()
+            Thread(target=return_to_flight, daemon=True).start()
+            return False
+        current["closing"] = True
+        Thread(target=window.destroy, daemon=True).start()
+
+    def close_flight():
+        current["closing"] = True
+        Thread(target=connection.destroy, daemon=True).start()
+
+    connection.events.closing += close_connection
+    window.events.closed += close_flight
+    checked, failures = [], []
+
+    def identify(view):
+        from System import Action
+        from balloon_predictor import __version__
+        def apply():
+            settings = view.native.webview.CoreWebView2.Settings
+            suffix = f" BalloonPredictor/{__version__} (+https://github.com/tbanyard/balloon-predictor)"
+            if " BalloonPredictor/" not in settings.UserAgent:
+                settings.UserAgent += suffix
+        view.native.Invoke(Action(apply))
+
+    def present():
+        with chooser.lock:
+            info = dict(chooser.presentation)
+        if info["generation"] <= current["generation"]:
+            return
+        current["generation"] = info["generation"]
+        if not (info["reuse"] and current["url"] == info["url"]):
+            window.load_url(info["navigation"])
+        current["url"] = info["url"]
+        window.show()
+        connection.hide()
 
     def verify_frontend():
-        try:
-            if not window.events.loaded.wait(30):
-                raise RuntimeError("The Windows window did not finish loading.")
-            deadline = time.monotonic() + 50
-            stage = "waiting for the connection screen"
-            while time.monotonic() < deadline:
-                try:
-                    state = window.evaluate_js(
-                        "(() => { const form = document.querySelector('#connection');"
-                        "if (form) {"
-                        "  if (form.hidden) document.querySelector('#choose-local')?.click();"
-                        "  const status = document.querySelector('#status.error');"
-                        "  if (status?.textContent) return 'error: ' + status.textContent;"
-                        "  if (!window.__bpLocal && form.dataset.ready === 'true' && !document.querySelector('#connect').disabled) {"
-                        "    const mode = document.querySelector('#mode'); mode.value = 'local';"
-                        "    mode.dispatchEvent(new Event('change')); form.requestSubmit(); window.__bpLocal = true;"
-                        "  }"
-                        "  return window.__bpLocal ? 'opening local mode' : 'waiting for the connection screen';"
-                        "}"
-                        "return window.L && document.querySelector('#dataset')?.value === 'demo' &&"
-                        " document.querySelector('#predict-button')?.disabled === false"
-                        " ? 'ready' : 'waiting for the flight controls'; })()"
-                    )
-                except webview.errors.JavascriptException:
-                    time.sleep(.2)
-                    continue
-                if state == "ready":
-                    if not window.evaluate_js("navigator.userAgent.includes('BalloonPredictor/')"):
-                        raise RuntimeError("The installed WebView did not identify BalloonPredictor in its User-Agent.")
-                    checked.append(True)
-                    LOG.info("Windows WebView2 rendered the UI with Demo weather selected.")
-                    return
-                if isinstance(state, str):
-                    if state.startswith("error: "):
-                        raise RuntimeError(state)
-                    stage = state
-                time.sleep(0.2)
-            raise RuntimeError(f"The Windows window check timed out while {stage}.")
-        except Exception:
-            LOG.exception("Windows window check failed")
-        finally:
-            window.destroy()
+        deadline = time.monotonic() + 70
+        roundtrip = False
+        while time.monotonic() < deadline and not current["closing"]:
+            present()
+            try:
+                if current["url"] is None:
+                    connection.evaluate_js("""(() => {
+                        const form=document.querySelector('#connection');
+                        if(!form)return;
+                        if(form.hidden)document.querySelector('#choose-local').click();
+                        if(!window.__bpLocal&&form.dataset.ready==='true'&&!document.querySelector('#connect').disabled){
+                            form.requestSubmit();window.__bpLocal=true;
+                        }
+                    })()""")
+                else:
+                    state = window.evaluate_js("""(() => {
+                        const button=document.querySelector('#predict-button');
+                        if(!window.L||button?.disabled!==false||document.querySelector('#dataset')?.value!=='demo')return false;
+                        if(!window.__bpTestStarted){
+                            document.querySelector('#flight_mode').value='ascent';
+                            document.querySelector('#burst_altitude').value='1000';button.click();window.__bpTestStarted=true;
+                        }
+                        return navigator.userAgent.includes('BalloonPredictor/')&&
+                          document.querySelector('#launch_datetime-date')?.type==='text'&&
+                          document.querySelector('#flight-status').textContent.startsWith('Flight complete');
+                    })()""")
+                    if state and not roundtrip:
+                        window.evaluate_js("window.__bpRetainedFlight=true")
+                        show_chooser()
+                        roundtrip = True
+                    elif roundtrip:
+                        connection.evaluate_js("document.querySelector('#resume')?.click()")
+                        present()
+                        if current["generation"] >= 2 and state:
+                            if not window.evaluate_js("window.__bpRetainedFlight===true"):
+                                raise RuntimeError("Returning from the connection screen reloaded the flight page.")
+                            checked.append(True)
+                            LOG.info("Windows WebView2 prediction, date controls and retained flight passed.")
+                            return
+            except webview.errors.JavascriptException:
+                pass  # Wait for navigation to finish.
+            time.sleep(.2)
+        raise RuntimeError("The Windows prediction and Return to flight check timed out.")
 
     def start_window():
-        # The two seconds start when the splash document is ready.
         splash.events.loaded.wait(15)
         time.sleep(2)
         try:
-            if not window.events.loaded.wait(30):
-                raise RuntimeError("The connection screen did not finish loading.")
-            # Preserve the installed Edge engine's real identity and add ours.
-            # Invoke on WinForms' UI thread before the chooser is made visible.
-            from System import Action
-            from balloon_predictor import __version__
-            def identify():
-                settings = window.native.webview.CoreWebView2.Settings
-                suffix = f" BalloonPredictor/{__version__} (+https://github.com/tbanyard/balloon-predictor)"
-                if " BalloonPredictor/" not in settings.UserAgent:
-                    settings.UserAgent += suffix
-            window.native.Invoke(Action(identify))
-            window.show()
-        finally:
+            for view in (window, connection):
+                if not view.events.loaded.wait(30):
+                    raise RuntimeError("The Windows window did not finish loading.")
+                identify(view)
+            connection.show()
             splash.destroy()
-        if verify:
-            verify_frontend()
+            if verify:
+                verify_frontend()
+            else:
+                while not window.events.closed.wait(.2):
+                    present()
+        except Exception as error:
+            failures.append(error)
+            LOG.exception("Windows window check or connection presentation failed")
+        finally:
+            current["closing"] = True
+            if not splash.events.closed.is_set():
+                splash.destroy()
+            connection.destroy()
+            window.destroy()
 
     webview.start(
-        start_window, gui="edgechromium",
-        private_mode=False, storage_path=str(root / "webview"),
+        start_window, gui="edgechromium", private_mode=False, storage_path=str(root / "webview"),
         icon=str(ROOT / "windows" / "BalloonPredictor.ico"),
     )
+    if failures:
+        raise RuntimeError("The Windows window could not complete startup or present the flight. See BalloonPredictor.log.") from failures[0]
     if verify and not checked:
         raise RuntimeError("The Windows window check did not pass.")
 
@@ -285,7 +336,7 @@ def main():
                             check_runtime(url, store)
                     if args.check_window or args.smoke_test is None:
                         with Chooser(root, port=0 if args.smoke_test else PORT) as chooser:
-                            open_window(chooser.url, root, verify=args.check_window)
+                            open_window(chooser, root, verify=args.check_window)
                 if args.smoke_test:
                     (root / "smoke-test-passed.txt").write_text(
                         "Installed runtime, local API, GRIB, terrain and both NetCDF exports passed.\n"

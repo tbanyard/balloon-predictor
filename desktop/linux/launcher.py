@@ -35,6 +35,10 @@ class App:
         self.root, self.temp, self.smoke = root, temp, smoke
         self.info = None
         self.passed = self.downloading = False
+        self.generation = 0
+        self.flight_url = None
+        self.roundtrip = 0
+        self.probing = False
         self.deadline = time.monotonic() + 100
         self.window = Gtk.Window(title="BalloonPredictor")
         self.window.set_default_size(1280, 850)
@@ -51,12 +55,17 @@ class App:
         self.context = WebKit2.WebContext.new_with_website_data_manager(manager)
         self.context.connect("download-started", self.on_download)
         self.web = WebKit2.WebView.new_with_context(self.context)
+        self.chooser = WebKit2.WebView.new_with_context(self.context)
+        self.views = Gtk.Stack()
+        self.views.add_named(self.web, "flight")
+        self.views.add_named(self.chooser, "chooser")
         from balloon_predictor import __version__
-        self.web.get_settings().set_user_agent_with_application_details(
-            "BalloonPredictor", __version__ + " (+https://github.com/tbanyard/balloon-predictor)")
-        self.web.connect("decide-policy", self.navigate)
-        self.web.connect("load-failed", self.load_failed)
-        self.window.add(self.web)
+        for view in (self.web, self.chooser):
+            view.get_settings().set_user_agent_with_application_details(
+                "BalloonPredictor", __version__ + " (+https://github.com/tbanyard/balloon-predictor)")
+            view.connect("decide-policy", self.navigate)
+            view.connect("load-failed", self.load_failed)
+        self.window.add(self.views)
         self.window.show_all()
         self.web.load_html("<!doctype html><p>Starting BalloonPredictor…</p>", None)
         self.log = (root / "BalloonPredictor.log").open("ab")
@@ -82,7 +91,22 @@ class App:
 
     def show_chooser(self, *_):
         if self.info:
-            self.web.load_uri(self.info["url"])
+            self.chooser.load_uri(self.info["url"] + "?splash=done&native=1")
+            self.views.set_visible_child_name("chooser")
+
+    def present_flight(self):
+        try:
+            presentation = json.loads((self.temp / "target.json").read_text())
+            generation = presentation["generation"]
+            if generation <= self.generation:
+                return
+            self.generation = generation
+            if not (presentation["reuse"] and self.flight_url == presentation["url"]):
+                self.web.load_uri(presentation["navigation"])
+            self.flight_url = presentation["url"]
+            self.views.set_visible_child_name("flight")
+        except (OSError, ValueError, KeyError):
+            pass  # The engine writes this file atomically when a connection succeeds.
 
     def selected(self):
         try:
@@ -158,7 +182,7 @@ class App:
             self.passed = source.read(8) == b"\x89HDF\r\n\x1a\n"
         if self.passed:
             (self.root / "smoke-result.json").write_text(json.dumps({"engine": "GRIB, GeoTIFF and both NetCDF exports passed",
-                "window": "Local chooser and prediction in GTK WebKit passed", "download": "NetCDF download passed"}) + "\n")
+                "window": "Local chooser, prediction and retained flight after Server/Return in GTK WebKit passed", "download": "NetCDF download passed"}) + "\n")
         Gtk.main_quit()
 
     def poll(self):
@@ -170,14 +194,21 @@ class App:
         if not self.info and ready.is_file():
             self.info = json.loads(ready.read_text())
             self.show_chooser()
+        if self.info:
+            self.present_flight()
         if self.info and self.smoke and not self.downloading:
             self.check_window()
         return True
 
     def check_window(self):
+        if self.probing:
+            return
+        self.probing = True
+        view = self.chooser if self.views.get_visible_child_name() == "chooser" else self.web
         script = """(() => {
             const form=document.querySelector('#connection');
             if(form){
+                if(window.__bpReturnTest){document.querySelector('#resume')?.click();return false;}
                 if(form.hidden)document.querySelector('#choose-local')?.click();
                 if(!window.__bpLocal&&form.dataset.ready==='true'&&!document.querySelector('#connect').disabled){
                     const mode=document.querySelector('#mode');mode.value='local';
@@ -191,17 +222,33 @@ class App:
                 window.__bpFlight=true;document.querySelector('#flight_mode').value='ascent';
                 document.querySelector('#burst_altitude').value='1000';document.querySelector('#ascent_rate').value='5';button.click();
             }
-            return navigator.userAgent.includes('BalloonPredictor/') && document.querySelector('#flight-status').textContent.startsWith('Flight complete');
+            return document.querySelector('#launch_datetime-date')?.type==='text' && document.querySelector('#launch_datetime-time')?.type==='text' && navigator.userAgent.includes('BalloonPredictor/') && document.querySelector('#flight-status').textContent.startsWith('Flight complete');
         })()"""
+        if self.roundtrip:
+            script = script.replace("return navigator.userAgent", "return window.__bpRetainedFlight===true && navigator.userAgent")
         def finished(view, result, _):
+            self.probing = False
             try:
                 ready = view.run_javascript_finish(result).get_js_value().to_boolean()
             except GLib.Error:
                 return
-            if ready and not self.downloading:
+            if ready and self.roundtrip == 0:
+                self.roundtrip = 1
+                self.web.run_javascript("window.__bpRetainedFlight=true", None, None, None)
+                self.show_chooser()
+                self.chooser.connect("load-changed", self.resume_test)
+                return
+            if ready and view is self.web and self.views.get_visible_child_name() == "flight" and not self.downloading:
+                if self.roundtrip != 2:
+                    return
                 self.downloading = True
                 view.download_uri(self.selected() + self.info["download"])
-        self.web.run_javascript(script, None, finished, None)
+        view.run_javascript(script, None, finished, None)
+
+    def resume_test(self, view, event):
+        if event == WebKit2.LoadEvent.FINISHED and self.roundtrip == 1:
+            view.run_javascript("window.__bpReturnTest=true", None, None, None)
+            self.roundtrip = 2
 
     def error(self, text):
         if self.smoke:

@@ -1,3 +1,4 @@
+const {fillDateTime}=require("./datetime-test-helper.cjs");
 /* Real Chromium tests. OSM requests are intercepted locally, never downloaded. */
 const fs=require('fs'),path=require('path'),os=require('os'),{spawn,spawnSync}=require('child_process'),assert=require('node:assert/strict');
 const {chromium}=require('playwright');
@@ -32,7 +33,7 @@ let logs='',browser;server.stderr.on('data',b=>logs+=b.toString());const delay=m
  assert.ok(tiles.length>0);assert.ok(tiles.every(t=>t.headers.referer===base+'/'),'OSM did not receive only the document origin');assert.ok(tiles.every(t=>!t.url.includes('?')),'OSM tile URLs should not bypass caching');
  assert.equal(await page.locator('.leaflet-tile').first().getAttribute('referrerpolicy'),'origin');assert.match(await page.locator('.leaflet-control-attribution').textContent(),/OpenStreetMap contributors/);
  assert.ok(await page.locator('#restore-weather').isDisabled());
- await page.selectOption('#weather-source','ifs');await page.selectOption('#dataset','ifs-snapshot');await page.fill('#launch_datetime','2024-01-15T12:00');await page.fill('#launch_latitude','53');await page.fill('#launch_longitude','-4');await page.fill('#launch_altitude','100');await page.fill('#burst_altitude','1500');await page.selectOption('#flight_mode','ascent');
+ await page.selectOption('#weather-source','ifs');await page.selectOption('#dataset','ifs-snapshot');await fillDateTime(page,'launch_datetime','2024-01-15T12:00');await page.fill('#launch_latitude','53');await page.fill('#launch_longitude','-4');await page.fill('#launch_altitude','100');await page.fill('#burst_altitude','1500');await page.selectOption('#flight_mode','ascent');
  await page.locator('#schedule-details summary').click();await page.selectOption('#run_mode','series');await page.fill('#series_duration','2');await page.fill('#series_interval','1');await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#flight-result').hidden,{},{timeout:30000});
  assert.equal(await page.locator('#series-launches button').count(),2);
  await page.click('#weather-overlay-open');await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.loadedFlight,{},{timeout:30000});
@@ -90,7 +91,10 @@ let logs='',browser;server.stderr.on('data',b=>logs+=b.toString());const delay=m
  console.log('Weather stage: status banner');
  // Global data follows a buffered viewport without a manual area button.
  await page.click('#duplicate-flight');await page.selectOption('#weather-source','demo');await page.selectOption('#run_mode','single');await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#flight-result').hidden&&document.querySelector('#weather-panel').dataset.coverageMode==='viewport',{},{timeout:30000});
- await page.evaluate(()=>{map.setView([53,-4],7,{animate:false});});await page.waitForFunction(()=>document.querySelector('#weather-overlay-status').textContent.startsWith('Weather ready'));await delay(900);
+ await page.evaluate(()=>{map.setView([53,-4],7,{animate:false});});await page.waitForFunction(()=>document.querySelector('#weather-overlay-status').textContent.startsWith('Weather ready'));
+ // Wait for the buffered request to finish after moving the viewport. A previous
+ // ready snapshot can remain visible during the deliberate map-move debounce.
+ await page.waitForFunction(()=>{const layer=Object.values(map._layers).find(l=>l.options?.className==='weather-field-image');return layer&&layer.getBounds().contains(map.getBounds());});
  const globalCount=posts.length;assert.ok(posts.at(-1).area);assert.equal(posts.at(-1).coverage,'auto');assert.ok(await page.evaluate(()=>{const layer=Object.values(map._layers).find(l=>l.options?.className==='weather-field-image'),b=layer.getBounds(),v=map.getBounds();return b.contains(v);}));
  await page.evaluate(()=>{map.panBy([10,0],{animate:false});});await delay(800);assert.equal(posts.length,globalCount,'Panning within the buffer unnecessarily requested weather');
  await page.evaluate(()=>{map.setView([53,8],8,{animate:false});});for(let i=0;i<100&&posts.length===globalCount;i++)await delay(30);assert.ok(posts.length>globalCount,'Panning outside the buffer did not request weather');await page.waitForFunction(()=>document.querySelector('#weather-overlay-status').textContent.startsWith('Weather ready'));
@@ -105,10 +109,10 @@ let logs='',browser;server.stderr.on('data',b=>logs+=b.toString());const delay=m
  await page.fill('#launch_latitude','45');await page.fill('#launch_longitude','10');await page.click('#weather-open');if(!await page.locator('details:has(#weather-form)').evaluate(e=>e.open))await page.locator('details:has(#weather-form) > summary').click();
  assert.deepEqual(await page.locator('#area-n,#area-w,#area-s,#area-e').evaluateAll(els=>els.map(e=>Number(e.value))),[55,-3,35,23]);
  await page.fill('#area-n','56');await page.click('#weather-close');await page.click('#weather-open');assert.equal(await page.inputValue('#area-n'),'56');await page.click('#download-launch-area');assert.equal(Number(await page.inputValue('#area-n')),55);
- await page.fill('#download-start','2024-01-15T00:00');await page.fill('#download-end','2024-01-21T00:00');await page.locator('#download-end').dispatchEvent('input');assert.match(await page.textContent('#download-length-note'),/144.0 hours/);
+ await fillDateTime(page,'download-start','2024-01-15T00:00');await fillDateTime(page,'download-end','2024-01-21T00:00');await page.locator('#download-end').dispatchEvent('input');assert.match(await page.textContent('#download-length-note'),/144.0 hours/);
  await page.click('#download-button');assert.ok(await page.locator('#large-download-dialog').isVisible());assert.equal(downloads.length,0);await page.locator('#large-download-dialog button[value=cancel]').click();await page.waitForFunction(()=>!document.querySelector('#download-button').disabled);assert.equal(downloads.length,0);
  await page.click('#download-button');await page.locator('#large-download-dialog button[value=download]').click();await page.waitForFunction(()=>document.querySelector('#weather-status').textContent.includes('Fixture:'));assert.equal(downloads.length,1);assert.equal(downloads[0].confirm_large_download,true);
- await page.fill('#download-end','2024-01-18T00:00');await page.click('#download-button');for(let i=0;i<50&&downloads.length<2;i++)await delay(20);assert.equal(downloads.length,2);assert.ok(!downloads[1].confirm_large_download);assert.ok(await page.locator('#large-download-dialog').isHidden());
- await page.fill('#download-end','2024-01-21T01:00');await page.click('#download-button');assert.equal(downloads.length,2);assert.match(await page.textContent('#weather-status'),/144 hours/);await page.click('#weather-close');
+ await fillDateTime(page,'download-end','2024-01-18T00:00');await page.click('#download-button');for(let i=0;i<50&&downloads.length<2;i++)await delay(20);assert.equal(downloads.length,2);assert.ok(!downloads[1].confirm_large_download);assert.ok(await page.locator('#large-download-dialog').isHidden());
+ await fillDateTime(page,'download-end','2024-01-21T01:00');await page.click('#download-button');assert.equal(downloads.length,2);assert.match(await page.textContent('#weather-status'),/144 hours/);await page.click('#weather-close');
  assert.deepEqual(errors,[]);console.log('Weather / OSM browser regression: PASS · full regional/buffered global coverage, automatic pan loading, no map label/subtitle, colour percentiles/view/fixed limits, altitude/pressure/masks, caching and stale responses, particles, four panels/mobile, dismissible status, launch-centred download defaults and 144-hour confirmation/cancel.');
 }catch(e){console.error(e.stack);if(logs)console.error(logs.slice(-2000));process.exitCode=1;}finally{if(browser)await browser.close();server.kill();server.once('exit',()=>fs.rmSync(tmp,{recursive:true,force:true}));}})();

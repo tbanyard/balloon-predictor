@@ -18,7 +18,7 @@ ORIGIN = {"Origin": "http://localhost"}
 
 @pytest.fixture
 def web_server(tmp_path):
-    app = SharedServer(Settings(tmp_path / "owner", shared_data_root=tmp_path / "users", default_dataset="demo"), 8007)
+    app = SharedServer(Settings(tmp_path / "owner", shared_data_root=tmp_path / "users", default_dataset="demo"), 8008)
     app.socket_path = Path("/browser-auth-fixture/identity.sock")
     app.start = lambda: None
     with LoginSSH(app, tmp_path), TestClient(app, base_url="http://localhost") as client:
@@ -44,7 +44,7 @@ def signin(client, username="alice", password=PASSWORD):
 def test_login_page_replaces_instruction_page(web_server):
     _, client = web_server
     health = client.get("/api/health").json()
-    assert health["version"] == "1.6.2" and health["browser_login"] is True
+    assert health["version"] == "1.6.3" and health["browser_login"] is True
     page = client.get("/")
     assert page.status_code == 200 and 'id="signin-form"' in page.text and 'type="password"' in page.text
     assert "python -m" not in page.text and "60 seconds" not in page.text
@@ -90,9 +90,9 @@ def test_desktop_web_mode_recognises_browser_login(monkeypatch, tmp_path, browse
     monkeypatch.setattr("desktop.connection.verify_server", lambda url:
                         {"requires_ssh_identity": True, "browser_login": browser_login})
     chooser = Chooser(tmp_path / "chooser")
-    chooser.connect_worker({"mode": "web", "address": "http://server.example:8007", "allow_http": True})
+    chooser.connect_worker({"mode": "web", "address": "http://server.example:8008", "allow_http": True})
     if browser_login:
-        assert chooser.state["target"] == "http://server.example:8007" and chooser.state["error"] is None
+        assert chooser.state["target"] == "http://server.example:8008" and chooser.state["error"] is None
     else:
         assert chooser.state["target"] is None and "SSH tunnel" in chooser.state["error"]
 
@@ -178,7 +178,7 @@ def test_app_ticket_reconnect_works_with_existing_browser_session(web_server):
 def test_full_browser_ssh_and_kernel_broker_handoff():
     with TemporaryDirectory(prefix="auth-", dir=Path(__file__).resolve().parents[2]) as temp:
         root = Path(temp)
-        app = SharedServer(Settings(root / "owner", shared_data_root=root / "users", default_dataset="demo"), 8007)
+        app = SharedServer(Settings(root / "owner", shared_data_root=root / "users", default_dataset="demo"), 8008)
         try:
             app.start()
         except PermissionError:

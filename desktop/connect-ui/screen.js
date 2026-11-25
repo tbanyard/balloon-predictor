@@ -83,7 +83,9 @@ async function poll(){
       }
       initialized=true;mode();
     }
-    if(state.target){location.replace(state.target);return;}
+    // Native shells present the retained flight WebView themselves. A browser
+    // still navigates normally; no privileged JavaScript bridge is exposed.
+    if(state.target&&!new URLSearchParams(location.search).has("native")){location.replace(state.target);return;}
     busy=state.busy;resume.hidden=!state.resume;
     showPrompt(state.challenge);
     if(state.busy)message(state.challenge?"Waiting for SSH sign-in…":"Connecting…");

@@ -89,7 +89,7 @@ class BrowserLogins:
         try:
             import asyncssh
         except ImportError:
-            raise LoginError("The sign-in service needs an update. Ask the operator to restart it using the v1.6.2 shared-server launcher.", 503) from None
+            raise LoginError("The sign-in service needs an update. Ask the operator to restart it using the v1.6.3 shared-server launcher.", 503) from None
         if (not isinstance(username, str) or not 1 <= len(username) <= 128 or not USERNAME.fullmatch(username)
                 or not isinstance(password, str) or not 1 <= len(password) <= 4096):
             raise LoginError("Enter your server username and password.")

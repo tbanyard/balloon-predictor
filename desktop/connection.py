@@ -75,6 +75,7 @@ class Chooser:
         self.lock = threading.RLock()
         self.state = {"busy": False, "target": None, "error": None, "challenge": None}
         self.session = self.local_url = self.forward = self.response = self.worker = None
+        self.presentation = {"generation": 0}
         self.closed = False
         self.stack = ExitStack()
 
@@ -158,17 +159,21 @@ class Chooser:
             self.forward.stop()
         self.stack.close()
 
-    def activate(self, url):
+    def activate(self, url, *, navigation=None, reuse=False):
+        # A native shell keeps the flight WebView alive while showing its chooser.
+        # An explicit new connection must navigate even when its root URL matches.
+        self.presentation = {"url": url, "navigation": navigation or url, "reuse": reuse,
+                             "generation": self.presentation["generation"] + 1}
         if self.target_file:
-            write_json(self.target_file, {"url": url})
+            write_json(self.target_file, self.presentation)
         self.session = url
-        self.state.update(busy=False, target=url, challenge=None)
+        self.state.update(busy=False, target=navigation or url, challenge=None)
 
     def resume(self, _):
         with self.lock:
             if not self.session or self.state["busy"]:
                 raise ValueError("No flight session is available.")
-            self.activate(self.session)
+            self.activate(self.session, reuse=True)
 
     def connect(self, options):
         mode = options.get("mode")
@@ -223,9 +228,7 @@ class Chooser:
                     return
                 write_json(self.preferences, values)
                 self.prefs = values
-                self.activate(url)
-                if forward and forward.signin:
-                    self.state["target"] = url + forward.signin
+                self.activate(url, navigation=url + forward.signin if forward and forward.signin else url)
                 old, self.forward, forward = self.forward, forward, None
             if old:
                 old.stop()

@@ -26,6 +26,8 @@ public final class FlightTest extends Instrumentation {
             check(onMain(()->app.localChoice.getVisibility()==View.VISIBLE&&app.serverChoice.getVisibility()==View.VISIBLE),"Missing large Local/Server choices");
             check(onMain(()->app.localChoice.getTop()==app.serverChoice.getTop()&&app.localChoice.getHeight()==app.serverChoice.getHeight()),"Local/Server cards are offset or unequal");
             check(onMain(()->app.localChoice.getCompoundDrawables()[1].getBounds().height()==app.serverChoice.getCompoundDrawables()[1].getBounds().height()),"Connection icons are unequal");
+            check(onMain(()->app.localChoice.getStateListAnimator()==null&&app.serverChoice.getStateListAnimator()==null),"Choice elevation animation causes inconsistent shadows");
+            check(onMain(()->app.localChoice.getElevation()==app.serverChoice.getElevation()),"Choice shadows differ");
             AtomicInteger trusted=new AtomicInteger(),authenticated=new AtomicInteger();
             runOnMainSync(()->{
                 app.serverChoice.performClick();
@@ -52,6 +54,7 @@ public final class FlightTest extends Instrumentation {
             js(original,"document.querySelector('#rescan-weather').click()");
             waitFor(()->"true".equals(js(original,"document.querySelector('#rescan-status').textContent.startsWith('Server data index refreshed')")),"rescan through SSH");
             js(original,"document.querySelector('#weather-close').click()");
+            check("true".equals(js(original,"document.querySelector('#launch_datetime-date').type==='text' && document.querySelector('#launch_datetime-time').type==='text' && !!document.querySelector('#launch_datetime-calendar')")),"Separate editable date/time controls are missing");
             String expected=args.getString("workspace_user");
             js(original,"fetch('/api/storage').then(r=>r.json()).then(v=>window.__workspaceUser=v.workspace_user)");
             waitFor(()->("\""+expected+"\"").equals(js(original,"window.__workspaceUser||''")),"verified personal workspace");
@@ -70,6 +73,7 @@ public final class FlightTest extends Instrumentation {
             waitFor(()->onMain(()->app.web!=null&&app.web!=original),"offline WebView");
             WebView offline=onMain(()->app.web);
             waitFor(()->"true".equals(js(offline,"Boolean(document.querySelector('#forecast') && window.L)")),"offline assets");
+            check("true".equals(js(offline,"document.querySelector('#launch_datetime-date').type==='text' && !!document.querySelector('#launch_datetime-calendar')")),"Offline calendar assets are missing");
             String fixture=args.getString("offline_fixture");
             js(offline,"(()=>{const raw=Uint8Array.from(atob('"+fixture+"'),c=>c.charCodeAt(0));"
                 +"const transfer=new DataTransfer();transfer.items.add(new File([raw],'fixture.bpforecast'));"

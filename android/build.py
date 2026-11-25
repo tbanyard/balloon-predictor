@@ -75,6 +75,9 @@ def build(args, work):
     shutil.copytree(ROOT / "frontend/vendor/leaflet", assets / "offline-assets/vendor/leaflet")
     shutil.copy2(ROOT / "frontend/coastlines.js", assets / "offline-assets/coastlines.js")
 
+    for name in ("datetime.js", "datetime.css"):
+        shutil.copy2(ROOT / "frontend" / name, assets / "offline-assets" / name)
+
     def apk(folder, base, output, sources, dependencies=(), classpath=()):
         classes, dex = folder / "classes", folder / "dex"
         classes.mkdir()

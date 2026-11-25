@@ -1,3 +1,12 @@
+## v1.6.3
+
+- Separate editable UTC dates and times, with a consistent explicit calendar picker.
+- Keep the flight page and calculated results alive while choosing a desktop server or returning to a flight.
+- Wider clickable tracks, selectable endpoints and a chooser for overlapping flights.
+- Render the first selected flight profile automatically after a calculation, including recalculation with the profile already open.
+- Clear download-area guidance and cleaner Android choice-card shadows.
+- Default shared-server port 8008; updated source and installer workflows.
+
 # Changelog
 
 ## 1.6.2

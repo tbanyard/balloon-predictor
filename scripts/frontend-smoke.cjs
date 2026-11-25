@@ -55,6 +55,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     window.eval(fs.readFileSync("frontend/sensitivity.js", "utf8"));
     window.eval(fs.readFileSync("frontend/trajectory-tools.js", "utf8"));
     window.eval(fs.readFileSync("frontend/weather-overlay.js", "utf8"));
+    window.eval(fs.readFileSync("frontend/datetime.js", "utf8"));
     window.eval(fs.readFileSync("frontend/app.js", "utf8"));
     await delay(200);
     const element = id => window.document.getElementById(id);
@@ -135,7 +136,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     if(!element("weather-dialog").open||element("download-source").value!=="gfs"||element("cycle-field").hidden)throw new Error("Online GFS workflow missing.");
     if(!element("predict-button").disabled)throw new Error("Online source submitted before download.");
     if(!element("era5-grid-field").hidden)throw new Error("ERA5-only grid is visible for GFS.");
-    if(!element("download-start").checkValidity()||!element("download-end").checkValidity())throw new Error("Suggested forecast minute times are invalid.");
+    if(!element("download-start-date").checkValidity()||!element("download-start-time").checkValidity()||!element("download-end-date").checkValidity()||!element("download-end-time").checkValidity())throw new Error("Suggested forecast minute times are invalid.");
     // A previously selected ERA5 grid must never leak into a forecast request.
     element("download-grid").value="1";
     const realFetch=window.fetch;let sent;

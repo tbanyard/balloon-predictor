@@ -60,7 +60,7 @@ public final class MainActivity extends Activity {
         TextView title=text("BalloonPredictor",16);title.setTypeface(null,android.graphics.Typeface.BOLD);title.setGravity(Gravity.CENTER_VERTICAL);
         title.setSingleLine(true);title.setEllipsize(android.text.TextUtils.TruncateAt.END);
         toolbar.addView(title,new LinearLayout.LayoutParams(0,dp(44),1));
-        String version="1.6.2";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        String version="1.6.3";try{version=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         TextView versionLabel=text("v"+version,11);versionLabel.setPadding(0,0,dp(6),0);toolbar.addView(versionLabel);
         weatherButton=button("Weather",false);weatherButton.setTextSize(12);weatherButton.setVisibility(View.GONE);toolbar.addView(weatherButton);
         weatherButton.setOnClickListener(v->{if(web!=null)web.evaluateJavascript("document.querySelector('#weather-open')?.click()",null);});
@@ -95,7 +95,7 @@ public final class MainActivity extends Activity {
         TextView eyebrow=text("SETUP",11);eyebrow.setLetterSpacing(.16f);eyebrow.setPadding(0,0,0,dp(10));card.addView(eyebrow);
         TextView title=text("Where would you like to work?",23);title.setTypeface(null,android.graphics.Typeface.BOLD);card.addView(title);
         card.addView(text("Choose this device or a server. Your current flight stays open while you choose.",14));
-        LinearLayout choices=new LinearLayout(this);choices.setBaselineAligned(false);choices.setGravity(Gravity.TOP);choices.setPadding(0,dp(24),0,dp(24));card.addView(choices);
+        LinearLayout choices=new LinearLayout(this);choices.setBaselineAligned(false);choices.setClipChildren(false);choices.setClipToPadding(false);choices.setGravity(Gravity.TOP);choices.setPadding(0,dp(24),0,dp(24));card.addView(choices);
         localChoice=choice("Local","On this phone",R.drawable.device);serverChoice=choice("Server","Connect securely",R.drawable.server);
         LinearLayout.LayoutParams left=new LinearLayout.LayoutParams(0,-1,1);left.setMarginEnd(dp(14));
         choices.addView(localChoice,left);choices.addView(serverChoice,new LinearLayout.LayoutParams(0,-1,1));
@@ -114,7 +114,7 @@ public final class MainActivity extends Activity {
         LinearLayout ports=new LinearLayout(this);sshFields.addView(ports);LinearLayout a=column(),b=column();
         ports.addView(a,new LinearLayout.LayoutParams(0,-2,1));ports.addView(b,new LinearLayout.LayoutParams(0,-2,1));
         sshPort=field(a,"SSH port","22",prefs.getString("ssh_port","22"),InputType.TYPE_CLASS_NUMBER);
-        webPort=field(b,"BalloonPredictor port","8007",prefs.getString("web_port","8007"),InputType.TYPE_CLASS_NUMBER);
+        webPort=field(b,"BalloonPredictor port","8008",prefs.getString("web_port","8008"),InputType.TYPE_CLASS_NUMBER);
         sshFields.addView(text("The server asks for a password or sign-in code when required. Passwords aren’t saved.",14));
         offlineHint=text("Open a saved .bpforecast file to calculate a flight on this phone. You can prepare a pack on the server before you lose signal.",14);
         connectionOptions.addView(offlineHint);
@@ -143,7 +143,9 @@ public final class MainActivity extends Activity {
         result.setPadding(dp(8),dp(30),dp(8),dp(26));result.setIncludeFontPadding(false);result.setCompoundDrawablePadding(dp(30));
         android.graphics.drawable.StateListDrawable states=new android.graphics.drawable.StateListDrawable();
         for(boolean selected:new boolean[]{true,false}){android.graphics.drawable.GradientDrawable shape=new android.graphics.drawable.GradientDrawable();shape.setColor(0xffffffff);shape.setCornerRadius(dp(25));shape.setStroke(dp(selected?2:1),selected?accent:0xffd7e1db);states.addState(selected?new int[]{android.R.attr.state_selected}:new int[]{},shape);}
-        result.setBackgroundTintList(null);result.setBackground(states);result.setElevation(dp(3));
+        result.setBackgroundTintList(null);result.setBackground(states);result.setStateListAnimator(null);result.setElevation(dp(2));
+        result.setOutlineProvider(android.view.ViewOutlineProvider.BACKGROUND);
+        if(android.os.Build.VERSION.SDK_INT>=28){result.setOutlineAmbientShadowColor(0xff52645b);result.setOutlineSpotShadowColor(0xff52645b);}
         android.graphics.drawable.GradientDrawable badge=new android.graphics.drawable.GradientDrawable();badge.setColor(icon==R.drawable.device?0xfffbece3:0xffe0f0ec);badge.setCornerRadius(dp(28));
         android.graphics.drawable.LayerDrawable image=new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{badge,getDrawable(icon)});
         image.setLayerInset(1,dp(22),dp(22),dp(22),dp(22));image.setBounds(0,0,dp(88),dp(88));
@@ -239,7 +241,7 @@ public final class MainActivity extends Activity {
         status.setText("Opening flight workspace…");
         WebView view=new WebView(this);pendingWeb=view;pendingSession=candidate;
         view.getSettings().setJavaScriptEnabled(true);view.getSettings().setDomStorageEnabled(true);
-        String appVersion="1.6.2";try{appVersion=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
+        String appVersion="1.6.3";try{appVersion=getPackageManager().getPackageInfo(getPackageName(),0).versionName;}catch(Exception ignored){}
         view.getSettings().setUserAgentString(view.getSettings().getUserAgentString()+" BalloonPredictor/"+appVersion+" (+https://github.com/tbanyard/balloon-predictor)");
         view.getSettings().setAllowFileAccess(false);
         // Offline HTML and scripts are bundled; it can read a forecast the

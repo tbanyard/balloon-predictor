@@ -2,7 +2,7 @@ name: macOS installer (test)
 
 on:
   push:
-    branches: [release-v1.6.2-test]
+    branches: [release-v1.6.3-test]
   workflow_dispatch:
 
 permissions:

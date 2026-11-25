@@ -1,14 +1,14 @@
 {
   "name": "balloon-predictor-frontend-checks",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "private": true,
   "description": "Optional DOM integration test; no Node build step is needed to run the predictor.",
   "scripts": {
     "test:frontend": "node scripts/frontend-smoke.cjs",
-    "test:browser": "node scripts/desktop-startup-check.cjs && node scripts/shared-browser-check.cjs && node scripts/browser-check.cjs && node scripts/weather-check.cjs",
+    "test:browser": "node scripts/desktop-startup-check.cjs && node scripts/shared-browser-check.cjs && node scripts/browser-check.cjs && node scripts/weather-check.cjs && node scripts/v163-check.cjs",
     "test:windows": "node scripts/window-smoke.cjs",
     "test:exports": "node scripts/export-smoke.cjs",
-    "test:ui": "node scripts/sensitivity-check.cjs && node scripts/profile-check.cjs && node scripts/weather-math-check.cjs && npm run test:windows && npm run test:frontend && npm run test:exports"
+    "test:ui": "node scripts/datetime-check.cjs && node scripts/sensitivity-check.cjs && node scripts/profile-check.cjs && node scripts/weather-math-check.cjs && npm run test:windows && npm run test:frontend && npm run test:exports"
   },
   "devDependencies": {
     "jsdom": "26.1.0",

@@ -16,6 +16,11 @@ static NSString *const nativeArch = @"x86_64";
 @property(nonatomic, strong) NSWindow *splash;
 @property(nonatomic) NSTimeInterval splashStart;
 @property(nonatomic, strong) WKWebView *web;
+@property(nonatomic, strong) WKWebView *chooser;
+@property(nonatomic, strong) NSTimer *connectionTimer;
+@property(nonatomic, copy) NSString *flightURL;
+@property(nonatomic) NSInteger generation;
+@property(nonatomic) NSInteger testRoundtrip;
 @property(nonatomic, strong) NSTask *backend;
 @property(nonatomic, strong) NSFileHandle *shutdownPipe;
 @property(nonatomic, strong) NSURL *dataDir;
@@ -78,7 +83,27 @@ static NSString *const nativeArch = @"x86_64";
 }
 
 - (void)showConnection:(id)sender {
-    if (self.web && self.origin) [self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[self.origin.absoluteString stringByAppendingString:@"?splash=done"]]]];
+    if (self.chooser && self.origin) {
+        self.web.hidden = YES;
+        self.chooser.hidden = NO;
+        [self.chooser loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[self.origin.absoluteString stringByAppendingString:@"?splash=done&native=1"]]]];
+    }
+}
+
+- (void)presentFlight {
+    NSData *data = [NSData dataWithContentsOfURL:[self.sessionDir URLByAppendingPathComponent:@"target.json"]];
+    id info = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:NULL] : nil;
+    if (![info isKindOfClass:NSDictionary.class] || [info[@"generation"] integerValue] <= self.generation) return;
+    NSString *root = info[@"url"], *navigation = info[@"navigation"];
+    if (![root isKindOfClass:NSString.class] || ![navigation isKindOfClass:NSString.class]) return;
+    self.generation = [info[@"generation"] integerValue];
+    if (!([info[@"reuse"] boolValue] && [root isEqualToString:self.flightURL])) {
+        self.testPageLoaded = NO;
+        [self.web loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:navigation]]];
+    }
+    self.flightURL = root;
+    self.chooser.hidden = YES;
+    self.web.hidden = NO;
 }
 
 - (void)showSplash {
@@ -231,13 +256,23 @@ static NSString *const nativeArch = @"x86_64";
     }
     self.origin = origin;
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
-    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.2";
+    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.3";
     config.applicationNameForUserAgent = [NSString stringWithFormat:@"BalloonPredictor/%@ (+https://github.com/tbanyard/balloon-predictor)", version];
     if (self.testRoot) config.websiteDataStore = WKWebsiteDataStore.nonPersistentDataStore;
     self.web = [[WKWebView alloc] initWithFrame:self.window.contentView.bounds configuration:config];
     self.web.navigationDelegate = self;
     self.web.UIDelegate = self;
-    self.window.contentView = self.web;
+    self.chooser = [[WKWebView alloc] initWithFrame:self.window.contentView.bounds configuration:config];
+    self.chooser.navigationDelegate = self;
+    self.chooser.UIDelegate = self;
+    self.web.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    self.chooser.autoresizingMask = NSViewWidthSizable | NSViewHeightSizable;
+    [self.window.contentView addSubview:self.web];
+    [self.window.contentView addSubview:self.chooser];
+    __weak BalloonApp *connectionSelf = self;
+    self.connectionTimer = [NSTimer scheduledTimerWithTimeInterval:0.2 repeats:YES block:^(NSTimer *poll) {
+        [connectionSelf presentFlight];
+    }];
     [self.window makeKeyAndOrderFront:nil];
     [self.splash orderOut:nil];
     self.splash = nil;
@@ -255,9 +290,11 @@ static NSString *const nativeArch = @"x86_64";
 }
 
 - (void)checkTestWindow {
-    if (!self.testPageLoaded || self.testProbePending || self.testRequestedDownload) return;
+    if (self.testProbePending || self.testRequestedDownload) return;
+    WKWebView *visible = self.chooser.hidden ? self.web : self.chooser;
     NSString *script = @"(() => { const form = document.querySelector('#connection');"
         @"if (form) {"
+        @"  if (window.__bpReturnTest) {document.querySelector('#resume')?.click();return 'returning to flight';}"
         @"  if (form.hidden) document.querySelector('#choose-local')?.click();"
         @"  const status = document.querySelector('#status.error');"
         @"  if (status?.textContent) return 'error: ' + status.textContent;"
@@ -269,6 +306,7 @@ static NSString *const nativeArch = @"x86_64";
         @"}"
         @"const button = document.querySelector('#predict-button');"
         @"if (!navigator.userAgent.includes('BalloonPredictor/')) return 'error: Missing app identification';"
+        @"if (document.querySelector('#launch_datetime-date')?.type!=='text') return 'waiting for editable date controls';"
         @"if (!window.__bpTestStarted) {"
         @"if (!window.L || document.querySelector('#dataset')?.value !== 'demo' || button?.disabled !== false)"
         @"  return 'waiting for the flight controls';"
@@ -279,7 +317,10 @@ static NSString *const nativeArch = @"x86_64";
         @"const status = document.querySelector('#flight-status')?.textContent || '';"
         @"return status.startsWith('Flight complete') ? 'ready' : 'calculating the Demo flight'; })()";
     self.testProbePending = YES;
-    [self.web evaluateJavaScript:script completionHandler:^(id value, NSError *error) {
+    if (self.testRoundtrip && visible == self.web) {
+        script = [script stringByReplacingOccurrencesOfString:@"const button =" withString:@"if (!window.__bpRetainedFlight) return 'error: Flight page was reloaded'; const button ="];
+    }
+    [visible evaluateJavaScript:script completionHandler:^(id value, NSError *error) {
         self.testProbePending = NO;
         if (error || self.quitting || self.testRequestedDownload || ![value isKindOfClass:NSString.class]) return;
         if ([value hasPrefix:@"error: "]) {
@@ -291,6 +332,13 @@ static NSString *const nativeArch = @"x86_64";
                 self.testStage = value;
                 NSLog(@"BalloonPredictor WebKit test: %@.", value);
             }
+            return;
+        }
+        if (self.testRoundtrip == 0) {
+            self.testRoundtrip = 1;
+            [self.web evaluateJavaScript:@"window.__bpRetainedFlight=true" completionHandler:^(id value, NSError *error) {
+                [self showConnection:nil];
+            }];
             return;
         }
         NSString *path = self.engineReport[@"download"];
@@ -383,6 +431,9 @@ static NSString *const nativeArch = @"x86_64";
 - (void)webView:(WKWebView *)webView didFinishNavigation:(WKNavigation *)navigation {
     if (!self.testRoot) return;
     self.testPageLoaded = YES;
+    if (webView == self.chooser && self.testRoundtrip) {
+        [self.chooser evaluateJavaScript:@"window.__bpReturnTest=true" completionHandler:nil];
+    }
     NSLog(@"BalloonPredictor WebKit test: %@ page loaded.",
           [webView.URL.port isEqual:self.origin.port] ? @"connection" : @"flight");
 }

@@ -14,3 +14,5 @@
 @container(max-width:600px){.sounding-plots{grid-template-columns:1fr!important;gap:16px}.sounding-plots svg#uv-chart{max-height:650px!important}.plot-toolbar{min-height:35px}}
 @media(max-width:700px){.sounding-page .sounding-plots{grid-template-columns:1fr!important}.sounding-page .sounding-plots #uv-chart{max-height:650px!important}}
 @media print{.plot-toolbar,.profile-link-zoom{display:none!important}.sounding-plots{grid-template-columns:minmax(0,720fr) minmax(0,440fr)!important}}
+
+.flight-track-picker{display:flex;flex-direction:column;gap:5px;max-height:240px;overflow:auto}.flight-track-picker button{font:inherit;font-size:12px;text-align:left;padding:8px;background:#f4f8f2;border:1px solid #d4dfd5;border-radius:5px;cursor:pointer;color:#244e40}.flight-track-picker button:hover{background:#e9f1e7}

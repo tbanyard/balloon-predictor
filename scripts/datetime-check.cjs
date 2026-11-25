@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict'),fs=require('node:fs'),{JSDOM}=require('jsdom');
+const dom=new JSDOM('<form><label for="launch">Launch UTC</label><input id="launch" type="datetime-local" required step="1"><input id="optional" type="datetime-local" step="3600"></form>',{runScripts:'outside-only',pretendToBeVisual:true}),w=dom.window,d=w.document,$=id=>d.getElementById(id);
+w.eval(fs.readFileSync('frontend/datetime.js','utf8'));
+const edit=(id,value)=>{$(id).value=value;$(id).dispatchEvent(new w.Event('input',{bubbles:true}));};
+assert.equal($('launch').type,'hidden');assert.equal($('launch-date').type,'text');assert.equal($('launch-time').type,'text');
+assert.equal(d.querySelector('label').htmlFor,'launch-date');assert(!d.querySelector('form').checkValidity());
+$('launch').value='2024-02-29T12:34:56';assert.equal($('launch-date').value,'2024-02-29');assert.equal($('launch-time').value,'12:34:56');assert(d.querySelector('form').checkValidity());
+let changes=0;$('launch').addEventListener('input',()=>changes++);
+edit('launch-date','2023-02-29');assert.equal($('launch-date').value,'2023-02-29');assert.equal($('launch').value,'');assert(!d.querySelector('form').checkValidity());
+edit('launch-date','2024-02-29');edit('launch-time','24:00');assert(!d.querySelector('form').checkValidity());edit('launch-time','05:01:00');assert.equal($('launch').value,'2024-02-29T05:01');assert.equal(changes,4);
+$('launch').disabled=true;assert($('launch-date').disabled&&$('launch-time').disabled&&$('launch-calendar').disabled);$('launch').disabled=false;
+$('optional').value='';assert(d.querySelector('form').checkValidity());edit('optional-date','2024-01-01');assert(!d.querySelector('form').checkValidity());edit('optional-time','12:30');assert.match($('optional-time').validationMessage,/whole hour/);edit('optional-time','12:00');assert(d.querySelector('form').checkValidity());
+$('launch-calendar').click();const cal=d.querySelector('.utc-calendar');assert(cal.open);cal.querySelector('[data-day="2024-02-28"]').click();assert.equal($('launch').value,'2024-02-28T05:01');assert(!cal.open);
+$('launch-calendar').click();cal.querySelector('[data-day="2024-02-28"]').dispatchEvent(new w.KeyboardEvent('keydown',{key:'ArrowRight',bubbles:true}));assert.equal(d.activeElement.dataset.day,'2024-02-29');
+cal.dispatchEvent(new w.KeyboardEvent('keydown',{key:'Escape',bubbles:true}));assert(!cal.open);assert.equal(d.activeElement,$('launch-calendar'));
+$('launch-calendar').click();cal.querySelector('[data-clear]').click();assert.equal($('launch-date').value,'');assert.equal($('launch-time').value,'');assert(!d.querySelector('form').checkValidity());
+assert(w.BalloonDateTime.validDate('0001-01-01'));assert(!w.BalloonDateTime.validDate('0000-01-01'));assert(!w.BalloonDateTime.validDate('2024-04-31'));
+dom.window.close();console.log('Editable UTC dates/times: validation, required/disabled fields, seconds, leap dates, calendar and keyboard passed.');

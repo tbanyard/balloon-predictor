@@ -1,0 +1,12 @@
+.utc-datetime{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(86px,.85fr);gap:8px;width:100%;margin-top:5px}
+.utc-part{display:block;min-width:0;position:relative}.utc-caption{display:block;font-size:10px;font-weight:500;line-height:1.4;color:#687d71;margin:0 0 5px}
+.utc-datetime input[type=text]{display:block;width:100%;min-width:0;font:inherit;font-size:13px;letter-spacing:0;padding:10px 8px;height:40px;border:1px solid #cedbd1;border-radius:6px;background:#fff;color:#193d30;box-sizing:border-box}
+.utc-datetime .utc-date input{padding-right:35px}.utc-datetime input:disabled{background:#eef1ed;color:#829187;cursor:not-allowed}
+.utc-calendar-button{position:absolute;right:3px;bottom:3px;width:31px;height:34px;min-height:0;padding:6px;border:0;background:transparent;color:#28665a;cursor:pointer;border-radius:4px}
+.utc-calendar-button:hover{background:#edf4ed}.utc-calendar-button:disabled{opacity:.4;cursor:not-allowed}.utc-calendar-button svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;display:block}
+.utc-calendar{box-sizing:border-box;width:min(340px,calc(100vw - 24px));padding:18px;border:1px solid #cedbd1;border-radius:14px;color:#193d30;background:#fff;box-shadow:0 12px 40px #193d3029;font:14px/1.5 system-ui,sans-serif;z-index:4000}
+.utc-calendar:not([open]){display:none}.utc-calendar::backdrop{background:#183a3055}.utc-calendar-heading{display:flex;align-items:center;gap:6px;margin-bottom:13px}
+.utc-calendar button,.utc-calendar select,.utc-calendar input{font:inherit;box-sizing:border-box;min-height:34px;border:1px solid #d8e2da;border-radius:5px;color:inherit;background:#f6f9f4;padding:4px 8px;cursor:pointer}
+.utc-calendar-heading select{flex:1;min-width:0}.utc-calendar-heading input{width:75px;cursor:text}.utc-calendar-heading button{flex:0 0 30px;font-size:21px;padding:0}
+.utc-days,.utc-weekdays{display:grid;grid-template-columns:repeat(7,1fr);gap:3px;text-align:center}.utc-weekdays{font-size:11px;color:#718379;margin-bottom:7px}.utc-days button{padding:3px;min-width:0;border-color:transparent;background:#fff}.utc-days button:hover{background:#edf4ed}.utc-days button[aria-pressed=true]{background:#c64e26;color:#fff}.utc-days button[aria-current=date]{border-color:#28665a}
+.utc-calendar-actions{display:flex;gap:6px;margin-top:14px;justify-content:space-between}.utc-calendar-actions button{font-size:12px;padding:5px 8px}.utc-calendar :focus-visible,.utc-datetime :focus-visible{outline:2px solid #d75b2c;outline-offset:2px}

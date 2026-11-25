@@ -486,7 +486,7 @@ def configured_app():
     settings = Settings.load()
     if settings.shared_server:
         from .multiuser import SharedServer
-        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8007")))
+        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8008")))
     return create_app(settings)
 
 

@@ -3,7 +3,7 @@
 set -euo pipefail
 source_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 shared_root=/data1/tim/BP_Data
-port=8007
+port=8008
 host=0.0.0.0
 old_source=
 old_config="$source_dir/config.yml"
@@ -17,7 +17,7 @@ while (($#)); do
         --config) old_config=$2; shift ;;
         --fresh) fresh=true ;;
         -h|--help)
-            printf '%s\n' "Usage: bash start-shared-server.sh [--port 8007] [--host 0.0.0.0] [--source OLD_DATA] [--config OLD_CONFIG] [--fresh]"
+            printf '%s\n' "Usage: bash start-shared-server.sh [--port 8008] [--host 0.0.0.0] [--source OLD_DATA] [--config OLD_CONFIG] [--fresh]"
             exit 0 ;;
         *) printf 'Unknown option: %s\n' "$1" >&2; exit 1 ;;
     esac
