@@ -1,5 +1,7 @@
 ## v1.6.3
 
+- Keep the Windows connection screen loaded when reopening it; reset the choices in place and verify Return exactly once after its button is enabled.
+
 - Repair Windows retained-window startup by loading a real local page before waiting for WebView2.
 - Cache checksum-verified Android dependencies, use a hosted Maven mirror and fall back with bounded delayed retries.
 

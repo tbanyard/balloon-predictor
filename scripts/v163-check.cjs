@@ -1,5 +1,16 @@
 /* Real controller + retained-page adapter, editable dates, track clicks and profiles. */
 const assert=require('node:assert/strict'),fs=require('node:fs'),os=require('node:os'),path=require('node:path'),{spawn}=require('node:child_process'),{chromium}=require('playwright'),{fillDateTime}=require('./datetime-test-helper.cjs');
+// Exercise the exact JavaScript used by the native Windows check against real
+// flight DOM/results; the Python tests cover its asynchronous native phases.
+const nativeScripts=JSON.parse(require('node:child_process').execFileSync(process.env.BP_TEST_PYTHON||'python3',['-c',`
+import ast,json
+from pathlib import Path
+module=ast.parse(Path('desktop/launcher.py').read_text())
+fn=next(n for n in module.body if isinstance(n,ast.FunctionDef) and n.name=='check_windows_frontend')
+print(json.dumps([n.args[0].value for n in ast.walk(fn) if isinstance(n,ast.Call) and isinstance(n.func,ast.Attribute) and n.func.attr=='evaluate_js' and n.args and isinstance(n.args[0],ast.Constant)]))
+`],{cwd:path.resolve(__dirname,'..'),encoding:'utf8'}));
+const snapshotScript=nativeScripts.find(s=>s.startsWith('window.__bpRetainedFlight=')),retainedScript=nativeScripts.find(s=>s.includes('const saved=window.__bpRetainedFlight'));
+assert(snapshotScript&&retainedScript,'Native Windows retention checks were not found');
 const root=path.resolve(__dirname,'..'),tmp=fs.mkdtempSync(path.join(process.env.BP_TEST_TMP||os.tmpdir(),'bp-v163-')),ready=path.join(tmp,'ready.json');
 const host=spawn(process.env.BP_TEST_PYTHON||'python3',['desktop/host.py','--data-dir',path.join(tmp,'data'),'--ready-file',ready,'--smoke-test'],{cwd:root,stdio:['pipe','ignore','pipe']});
 let logs='',browser;host.stderr.on('data',b=>logs+=b);const delay=ms=>new Promise(r=>setTimeout(r,ms));
@@ -35,11 +46,26 @@ let logs='',browser;host.stderr.on('data',b=>logs+=b);const delay=ms=>new Promis
  const endpoint=await flight.evaluate(()=>{const p=allFlights()[2].result.summary.burst,q=map.latLngToContainerPoint([p.latitude,p.longitude]),r=map.getContainer().getBoundingClientRect();return{x:r.x+q.x,y:r.y+q.y};});await flight.mouse.click(endpoint.x,endpoint.y);assert.equal(await flight.evaluate(()=>activeSite().selectedIndex),2);assert(await flight.locator('#move-launch-dialog').isHidden());
  // Keep the exact document, selected flight and map state through the chooser.
  await flight.evaluate(()=>{window.__retainedFlight='v163';map.stop();map.setZoom(9,{animate:false});});await flight.waitForFunction(()=>map.getZoom()===9);const selection=await flight.evaluate(()=>({index:activeSite().selectedIndex,job:activeSite().jobId,zoom:map.getZoom(),tracks:allFlights().length}));
- await chooser.goto(info.url+'?splash=done&native=1');await chooser.waitForSelector('#resume:not([hidden]):enabled');await chooser.click('#resume');for(let i=0;i<100&&target().generation<2;i++)await delay(50);
- const resumed=target();assert.equal(resumed.reuse,true);assert.equal(resumed.url,new URL(flight.url()).origin);
- // Native shells use this presentation record to show the existing view, without goto/reload.
- assert.equal(await flight.evaluate(()=>window.__retainedFlight),'v163');assert.deepEqual(await flight.evaluate(()=>({index:activeSite().selectedIndex,job:activeSite().jobId,zoom:map.getZoom(),tracks:allFlights().length})),selection);assert(chooser.url().includes('native=1'));
+ const chooserDocument=await chooser.evaluate(()=>window.__chooserDocument='retained');
+ await flight.evaluate(()=>window.__bpTestStarted=true);
+ await flight.evaluate(script=>eval(script),snapshotScript);
+ for(let generation=2;generation<=4;generation++){
+   await chooser.evaluate(()=>window.BalloonConnection.showChoices());
+   assert.equal(await chooser.evaluate(()=>window.__chooserDocument),chooserDocument,'Connection choices reloaded their document');
+   assert(await chooser.locator('#connection').isHidden(),'Connection choices did not reset in place');
+   assert.equal(await chooser.locator('#choose-local').getAttribute('aria-pressed'),'false');
+   await chooser.waitForSelector('#resume:not([hidden]):enabled');await chooser.click('#resume');
+   for(let i=0;i<100&&target().generation<generation;i++)await delay(50);
+   const resumed=target();assert.equal(resumed.generation,generation);assert.equal(resumed.reuse,true);assert.equal(resumed.url,new URL(flight.url()).origin);
+   assert.equal(await flight.evaluate(()=>window.__retainedFlight),'v163');
+   assert.deepEqual(await flight.evaluate(()=>({index:activeSite().selectedIndex,job:activeSite().jobId,zoom:map.getZoom(),tracks:allFlights().length})),selection);
+   assert(await flight.evaluate(script=>eval(script),retainedScript),'The actual Windows verification script rejected the retained flight');
+ }
+ assert(chooser.url().includes('native=1'));
+ await flight.evaluate(()=>document.querySelector('#flight-result').hidden=true);
+ assert.equal(await flight.evaluate(script=>eval(script),retainedScript),false,'Windows verification accepted missing flight results');
+ await flight.evaluate(()=>document.querySelector('#flight-result').hidden=false);
  await flight.evaluate(()=>BalloonWindows.show('sounding-panel'));await flight.waitForFunction(()=>document.querySelector('#sounding-panel').dataset.flight===activeSite().jobId+':2:ascent');
  assert.deepEqual(errors,[]);if(process.env.BP_TEST_OUTPUT){fs.mkdirSync(process.env.BP_TEST_OUTPUT,{recursive:true});await flight.screenshot({path:path.join(process.env.BP_TEST_OUTPUT,'v163-flight.png')});await flight.click('#launch_datetime-calendar');await flight.screenshot({path:path.join(process.env.BP_TEST_OUTPUT,'v163-calendar.png')});}
- console.log('v1.6.3 browser regression: PASS · editable UTC/calendar/seconds, first profile after series/recalculation, actual wide-track/endpoint clicks, overlapping flight choices, and retained controller return with unchanged document/selection/zoom/results.');
+ console.log('v1.6.3 browser regression: PASS · editable UTC/calendar/seconds, first profile after series/recalculation, actual wide-track/endpoint clicks, overlapping flight choices, and three in-place chooser returns with unchanged document/selection/zoom/results and the actual Windows verification scripts.');
 }catch(error){console.error(error.stack,logs.slice(-2000));process.exitCode=1;}finally{if(browser)await browser.close();host.stdin.end();const timer=setTimeout(()=>host.kill('SIGKILL'),5000);host.once('exit',()=>{clearTimeout(timer);fs.rmSync(tmp,{recursive:true,force:true});});}})();

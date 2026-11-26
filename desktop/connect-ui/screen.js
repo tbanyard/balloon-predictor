@@ -16,6 +16,13 @@ function choose(local){
 }
 $("choose-local").onclick=()=>choose(true);
 $("choose-server").onclick=()=>choose(false);
+// The Windows shell reopens this same document rather than navigating to its
+// current URL. This resets only the choices; preferences and the live session stay.
+window.BalloonConnection={showChoices(){
+  selected=null;form.hidden=true;
+  for(const id of ["choose-local","choose-server"])$(id).setAttribute("aria-pressed","false");
+  message("");updateActions();return true;
+}};
 function updateActions(){
   const ready=initialized&&splashDone&&controllerReady&&selected!==null;
   form.dataset.ready=String(ready);

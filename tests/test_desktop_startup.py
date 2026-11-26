@@ -58,6 +58,7 @@ def test_windows_connection_retains_the_flight_view(monkeypatch, tmp_path, reuse
             hide=lambda: events.append((title, 'hide')),
             destroy=lambda: events.append((title, 'destroy')),
             load_url=lambda url: events.append((title, 'navigate', url)),
+            evaluate_js=lambda script: events.append((title, 'evaluate', script)) or True,
             native=SimpleNamespace(Invoke=lambda callback: callback(), webview=SimpleNamespace(
                 CoreWebView2=SimpleNamespace(Settings=SimpleNamespace(UserAgent='Actual Edge engine')))),
         )
@@ -76,6 +77,7 @@ def test_windows_connection_retains_the_flight_view(monkeypatch, tmp_path, reuse
     assert navigations[0][2] == flight+'/signin?ticket=example'
     assert not any(e == (main.title, 'navigate', connection.url) for e in events)
     assert (main.title, 'hide') in events and (connection.title, 'hide') in events
+    assert not any(e[:2] == (connection.title, 'navigate') for e in events), 'Reopening the chooser must not navigate its retained page.'
     for view in (main, connection):
         assert view.native.webview.CoreWebView2.Settings.UserAgent.startswith('Actual Edge engine BalloonPredictor/1.6.3 ')
 

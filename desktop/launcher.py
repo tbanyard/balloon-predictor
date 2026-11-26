@@ -139,6 +139,80 @@ def serve(root, port):
                 LOG.warning("Local server did not stop before the shutdown timeout.")
 
 
+def check_windows_frontend(window, connection, show_chooser, present, current, timeout=70):
+    """Exercise a calculated flight and one real Return action in order.
+
+    pywebview's evaluate_js waits internally for its page-ready event. Poll the
+    public loaded event first and evaluate only the page for the current phase;
+    a navigation must never leave this test blocked in an unrelated view.
+    """
+    deadline = time.monotonic() + timeout
+    phase, logged, resume_generation = "connecting", None, None
+    while time.monotonic() < deadline and not current["closing"]:
+        present()
+        if phase != logged:
+            LOG.info("Windows window check: %s.", phase)
+            logged = phase
+        if phase == "connecting":
+            if current["url"] is not None:
+                phase = "calculating the Demo flight"
+            elif connection.events.loaded.is_set():
+                connection.evaluate_js("""(() => {
+                    const form=document.querySelector('#connection');
+                    if(!form)return;
+                    if(form.hidden)document.querySelector('#choose-local').click();
+                    if(!window.__bpLocal&&form.dataset.ready==='true'&&!document.querySelector('#connect').disabled){
+                        form.requestSubmit();window.__bpLocal=true;
+                    }
+                })()""")
+        elif phase == "calculating the Demo flight" and window.events.loaded.is_set():
+            ready = window.evaluate_js("""(() => {
+                const button=document.querySelector('#predict-button');
+                if(!window.L||button?.disabled!==false||document.querySelector('#dataset')?.value!=='demo')return false;
+                if(!window.__bpTestStarted){
+                    document.querySelector('#flight_mode').value='ascent';
+                    document.querySelector('#burst_altitude').value='1000';button.click();window.__bpTestStarted=true;
+                }
+                return navigator.userAgent.includes('BalloonPredictor/')&&
+                  document.querySelector('#launch_datetime-date')?.type==='text'&&
+                  document.querySelector('#flight-status').textContent.startsWith('Flight complete');
+            })()""")
+            if ready:
+                window.evaluate_js("""window.__bpRetainedFlight={
+                    exportPath:document.querySelector('[data-format=json]')?.getAttribute('href'),
+                    status:document.querySelector('#flight-status').textContent
+                }""")
+                show_chooser()
+                phase = "waiting for Return to flight"
+        elif phase == "waiting for Return to flight" and connection.events.loaded.is_set():
+            resume_generation = current["generation"]
+            clicked = connection.evaluate_js("""(() => {
+                const button=document.querySelector('#resume');
+                if(!button||button.hidden||button.disabled)return false;
+                button.click();return true;
+            })()""")
+            if clicked:
+                phase = "returning to the retained flight"
+        elif phase == "returning to the retained flight":
+            if current["generation"] > resume_generation and window.events.loaded.is_set():
+                retained = window.evaluate_js("""(() => {
+                    const saved=window.__bpRetainedFlight;
+                    return Boolean(saved&&saved.exportPath&&window.__bpTestStarted&&
+                        saved.exportPath===document.querySelector('[data-format=json]')?.getAttribute('href')&&
+                        saved.status===document.querySelector('#flight-status')?.textContent&&
+                        document.querySelector('#flight-result')?.hidden===false);
+                })()""")
+                if not retained:
+                    raise RuntimeError("Returning from the connection screen lost or replaced the calculated flight.")
+                LOG.info("Windows WebView2 prediction, date controls and retained flight passed.")
+                return
+        time.sleep(.2)
+    raise RuntimeError(
+        f"The Windows window check stopped while {phase}; "
+        f"flight_loaded={window.events.loaded.is_set()}, connection_loaded={connection.events.loaded.is_set()}."
+    )
+
+
 def open_window(chooser, root, verify=False):
     import webview
     from webview.menu import Menu, MenuAction
@@ -153,10 +227,11 @@ def open_window(chooser, root, verify=False):
     current = {"url": None, "generation": 0, "closing": False}
 
     def show_chooser():
-        # Only the small connection page is reloaded. The flight DOM, its plots,
-        # zoom and selections stay in the separate, hidden WebView2 window.
-        connection.load_url(chooser_url)
+        # Keep BOTH pages alive. Reassigning the chooser's current URL clears
+        # pywebview's ready flags and can leave no new navigation to restore them.
         connection.show()
+        if not connection.evaluate_js("Boolean(window.BalloonConnection?.showChoices())"):
+            raise RuntimeError("The connection page did not expose its Local/Server choices.")
         window.hide()
 
     window = webview.create_window(
@@ -213,51 +288,6 @@ def open_window(chooser, root, verify=False):
         window.show()
         connection.hide()
 
-    def verify_frontend():
-        deadline = time.monotonic() + 70
-        roundtrip = False
-        while time.monotonic() < deadline and not current["closing"]:
-            present()
-            try:
-                if current["url"] is None:
-                    connection.evaluate_js("""(() => {
-                        const form=document.querySelector('#connection');
-                        if(!form)return;
-                        if(form.hidden)document.querySelector('#choose-local').click();
-                        if(!window.__bpLocal&&form.dataset.ready==='true'&&!document.querySelector('#connect').disabled){
-                            form.requestSubmit();window.__bpLocal=true;
-                        }
-                    })()""")
-                else:
-                    state = window.evaluate_js("""(() => {
-                        const button=document.querySelector('#predict-button');
-                        if(!window.L||button?.disabled!==false||document.querySelector('#dataset')?.value!=='demo')return false;
-                        if(!window.__bpTestStarted){
-                            document.querySelector('#flight_mode').value='ascent';
-                            document.querySelector('#burst_altitude').value='1000';button.click();window.__bpTestStarted=true;
-                        }
-                        return navigator.userAgent.includes('BalloonPredictor/')&&
-                          document.querySelector('#launch_datetime-date')?.type==='text'&&
-                          document.querySelector('#flight-status').textContent.startsWith('Flight complete');
-                    })()""")
-                    if state and not roundtrip:
-                        window.evaluate_js("window.__bpRetainedFlight=true")
-                        show_chooser()
-                        roundtrip = True
-                    elif roundtrip:
-                        connection.evaluate_js("document.querySelector('#resume')?.click()")
-                        present()
-                        if current["generation"] >= 2 and state:
-                            if not window.evaluate_js("window.__bpRetainedFlight===true"):
-                                raise RuntimeError("Returning from the connection screen reloaded the flight page.")
-                            checked.append(True)
-                            LOG.info("Windows WebView2 prediction, date controls and retained flight passed.")
-                            return
-            except webview.errors.JavascriptException:
-                pass  # Wait for navigation to finish.
-            time.sleep(.2)
-        raise RuntimeError("The Windows prediction and Return to flight check timed out.")
-
     def start_window():
         splash.events.loaded.wait(15)
         time.sleep(2)
@@ -270,7 +300,8 @@ def open_window(chooser, root, verify=False):
             connection.show()
             splash.destroy()
             if verify:
-                verify_frontend()
+                check_windows_frontend(window, connection, show_chooser, present, current)
+                checked.append(True)
             else:
                 while not window.events.closed.wait(.2):
                     present()
