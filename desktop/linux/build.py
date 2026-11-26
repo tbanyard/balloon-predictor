@@ -61,7 +61,7 @@ def build(output, work, wheels):
     for name in ("balloon_predictor", "frontend"):
         shutil.copytree(REPO / name, dest / name, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     (dest / "desktop/linux").mkdir(parents=True)
-    for name in ("launcher.py", "connection.py", "host.py", "smoke.py"):
+    for name in ("launcher.py", "connection.py", "host.py", "smoke.py", "forward.py"):
         shutil.copy2(HERE.parent / name, dest / "desktop" / name)
     shutil.copy2(HERE / "launcher.py", dest / "desktop/linux/launcher.py")
     shutil.copytree(HERE.parent / "connect-ui", dest / "desktop/connect-ui")

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-spec = importlib.util.spec_from_file_location("release_v152", Path(__file__).resolve().parents[1] / "scripts/release-v1.6.3.py")
+spec = importlib.util.spec_from_file_location("release_v152", Path(__file__).resolve().parents[1] / "scripts/release-v1.6.4.py")
 release = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(release)
 
@@ -82,3 +82,25 @@ def test_api_lookup_reads_another_page(monkeypatch):
     rows = release.workflow_runs("tested")
     assert len(calls) == 2 and "page=2" in calls[1][1]
     assert rows[0]["workflowName"] == "Python and browser checks"
+
+
+def test_partial_download_retries_then_reuses_only_verified_files(tmp_path, monkeypatch):
+    import subprocess
+    artifact='installer';name='example.exe';commit='tested-source';folder=tmp_path/artifact
+    folder.mkdir();(folder/'partial-download.zip').write_bytes(b'incomplete')
+    calls=[]
+    def download(*args,**kwargs):
+        calls.append(args);target=Path(args[args.index('--dir')+1])
+        if len(calls)==1:
+            (target/'partial.zip').write_bytes(b'interrupted')
+            raise subprocess.CalledProcessError(1,args)
+        (target/name).write_bytes(b'tested installer')
+        (target/'SHA256SUMS.txt').write_text(release.digest(target/name)+'  '+name+'\n')
+        (target/'build-info.json').write_text(json.dumps({'source_commit':commit}))
+    monkeypatch.setattr(release,'run',download)
+    monkeypatch.setattr(release.time,'sleep',lambda _:None)
+    binary,report=release.collect_artifact(folder,artifact,name,commit,123)
+    assert binary.read_bytes()==b'tested installer' and report['source_commit']==commit
+    assert len(calls)==2 and not (folder/'partial.zip').exists() and not (folder/'partial-download.zip').exists()
+    assert release.collect_artifact(folder,artifact,name,commit,123)[0]==binary
+    assert len(calls)==2, 'A complete verified artifact was downloaded again'

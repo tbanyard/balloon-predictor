@@ -43,7 +43,7 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
  $('sonde-scope').value='full';$('sonde-scope').onchange();assert.equal($('sonde-status').hidden,true);assert.equal($('model-box-status').querySelector('a').href,modelURL);
  $('sonde-scope').value='ascent';$('sonde-scope').onchange();assert.equal($('sonde-status').querySelector('a').href,sondeLink.href);
  $('run_mode').value='series';$('series_duration').value='2';$('series_interval').value='1';$('run_mode').onchange();await $('flight-form').onsubmit({preventDefault(){}});
- const launches=()=>[...$('series-launches').querySelectorAll('button')];assert.equal(launches().length,2);
+ const launches=()=>[...$('series-launches').querySelectorAll('.series-launch')];assert.equal(launches().length,2);
  // A pending export for flight 0 must not claim to be flight 1 after switching.
  let resume;const exportGate=new Promise(r=>resume=r);w.fetch=async(url,o)=>{if(String(url).endsWith('/model-box'))await exportGate;return realFetch(url,o);};
  const exporting=$('model-box-button').onclick();await delay(20);assert.equal($('model-box-button').disabled,true);

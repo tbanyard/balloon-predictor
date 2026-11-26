@@ -39,11 +39,13 @@ class WeatherStore:
         self.cache = OrderedDict()
         self.lock = threading.RLock()
         self.native = NativeCatalog(settings)
+        from .weather.shared import SharedCatalog
+        self.shared = SharedCatalog(settings)
         from .terrain import TerrainCatalog
         self.terrain = TerrainCatalog(settings.terrain_dir or settings.data_dir / "terrain")
 
     def list(self):
-        result = [DemoWeather.info, *self.native.list()]
+        result = [DemoWeather.info, *self.native.list(), *self.shared.list()]
         for path in sorted((self.settings.data_dir / "weather").glob("*.json")):
             try:
                 metadata = json.loads(path.read_text(encoding="utf-8"))
@@ -88,6 +90,10 @@ class WeatherStore:
             return weather
         if name in ("era5", "wrf") or any(info["id"] == name for info in self.native.wrf):
             weather = self.native.get(name, when)
+            weather.terrain_catalog = self.terrain
+            return weather
+        if name in self.shared.entries:
+            weather = self.shared.get(name, when)
             weather.terrain_catalog = self.terrain
             return weather
         checked_name(name)

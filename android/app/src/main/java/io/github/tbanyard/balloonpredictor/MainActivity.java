@@ -33,7 +33,7 @@ public final class MainActivity extends Activity {
     private Button vpn;
     EditText address,host,username,sshPort,webPort;
     CheckBox allowHttp;
-    TextView status;
+    TextView status,connectionDot;
     WebView web;
     private LinearLayout webFields,sshFields;
     private LinearLayout connectionOptions;
@@ -64,7 +64,8 @@ public final class MainActivity extends Activity {
         TextView versionLabel=text("v"+version,11);versionLabel.setPadding(0,0,dp(6),0);toolbar.addView(versionLabel);
         weatherButton=button("Weather",false);weatherButton.setTextSize(12);weatherButton.setVisibility(View.GONE);toolbar.addView(weatherButton);
         weatherButton.setOnClickListener(v->{if(web!=null)web.evaluateJavascript("document.querySelector('#weather-open')?.click()",null);});
-        serverButton=button("Server",false);serverButton.setTextSize(12);toolbar.addView(serverButton);layout.addView(toolbar);
+        serverButton=button("Server",false);serverButton.setTextSize(12);toolbar.addView(serverButton);
+        connectionDot=text("●",13);connectionDot.setPadding(dp(5),0,dp(4),0);connectionDot.setVisibility(View.GONE);toolbar.addView(connectionDot);layout.addView(toolbar);
         for(Button action:new Button[]{weatherButton,serverButton}){
             action.setMinWidth(0);action.setMinimumWidth(0);action.setPadding(dp(8),0,dp(8),0);
         }
@@ -72,6 +73,18 @@ public final class MainActivity extends Activity {
         buildForm();
         serverButton.setOnClickListener(v->{if(form.getVisibility()==View.VISIBLE&&web!=null)showFlight();else showForm();});
         splash();
+        ui.postDelayed(this::updateConnectionDot,2000);
+    }
+
+    private void updateConnectionDot(){
+        if(closed)return;
+        if(web==null||session==null||session.offline)connectionDot.setVisibility(View.GONE);
+        else{connectionDot.setVisibility(View.VISIBLE);web.evaluateJavascript("window.BalloonNetwork?.state||'reconnecting'",answer->{
+            boolean ready="\"connected\"".equals(answer),signin="\"signin_required\"".equals(answer);
+            connectionDot.setTextColor(ready?0xff2a8266:signin?0xffc24736:0xffdf8a2c);
+            String label=ready?"Connected":signin?"Sign-in required":"Reconnecting…";connectionDot.setTooltipText(label);connectionDot.setContentDescription(label);
+        });}
+        ui.postDelayed(this::updateConnectionDot,2000);
     }
 
     private void splash(){
@@ -190,6 +203,7 @@ public final class MainActivity extends Activity {
     private void showForm(){
         weatherButton.setVisibility(View.GONE);
         serverButton.setVisibility(View.VISIBLE);if(web!=null)web.setVisibility(View.GONE);
+        connectionOptions.setVisibility(View.GONE);localChoice.setSelected(false);serverChoice.setSelected(false);
         form.setVisibility(View.VISIBLE);returnButton.setVisibility(web==null?View.GONE:View.VISIBLE);
         updateMode();
     }
@@ -214,7 +228,7 @@ public final class MainActivity extends Activity {
         }
         network.execute(()->{
             try{
-                ServerSession next=selected==0?ServerSession.direct(url,http):ServerSession.ssh(hostname,Integer.parseInt(sp),user,Integer.parseInt(wp),prefs.getInt("local_port",0),credentials);
+                ServerSession next=selected==0?ServerSession.direct(url,http):ServerSession.ssh(hostname,Integer.parseInt(sp),user,Integer.parseInt(wp),prefs.getInt("local_port",0),credentials,getFilesDir());
                 runOnUiThread(()->{
                     if(closed||token!=attempt){next.close();return;}
                     open(next,token,()->{
@@ -357,8 +371,8 @@ public final class MainActivity extends Activity {
         SaveRequest item=new SaveRequest();item.mime=mime==null?"application/octet-stream":mime;
         item.name=URLUtil.guessFileName(url,disposition,item.mime).replace('/','_').replace((char)92,'_');
         if(url.startsWith("blob:"+origin+"/")){
-            view.evaluateJavascript("(async()=>{const b=await(await fetch("+JSONObject.quote(url)+")).blob();if(b.size>4000000)return;const f=new FileReader();f.onload=()=>window.__bpExport=f.result;f.readAsDataURL(b)})()",null);
-            readBlob(view,item,25);
+            view.evaluateJavascript("(async()=>{const b=await(await fetch("+JSONObject.quote(url)+")).blob();if(b.size>33554432)return;const f=new FileReader();f.onload=()=>window.__bpExport=f.result;f.readAsDataURL(b)})()",null);
+            readBlob(view,item,100);
         }else if(sameOrigin(url,origin)){
             item.url=url;item.agent=agent;item.cookies=android.webkit.CookieManager.getInstance().getCookie(url);chooseSave(item);
         }
@@ -371,12 +385,15 @@ public final class MainActivity extends Activity {
                 try{
                     if(answer==null||"null".equals(answer)){readBlob(view,item,tries-1);return;}
                     String data=new JSONArray("["+answer+"]").getString(0);
-                    if(!data.startsWith("data:")||data.length()>5500000)throw new IllegalArgumentException();
+                    if(!data.startsWith("data:")||data.length()>46000000)throw new IllegalArgumentException();
                     item.data=Base64.decode(data.substring(data.indexOf(',')+1),Base64.DEFAULT);
                     if(item.name.startsWith("download"))item.name=item.mime.equals("text/csv")?"offline-balloon-flight.csv":
                         item.mime.contains("geo+json")?"offline-balloon-flight.geojson":"balloon-launch-setups.json";
-                    chooseSave(item);
-                }catch(Exception e){toast("Could not read the setup export.");}
+                    view.evaluateJavascript("(()=>{const name=window.__bpExportFilename||null;delete window.__bpExportFilename;return name})()",filename->{
+                        try{if(filename!=null&&!"null".equals(filename)){String name=new JSONArray("["+filename+"]").getString(0);if(name.length()<=160&&!name.contains("/")&&!name.contains("\\"))item.name=name;}}catch(Exception ignored){}
+                        chooseSave(item);
+                    });
+                }catch(Exception e){toast("Could not read the saved flight export.");}
             });
         },160);
     }

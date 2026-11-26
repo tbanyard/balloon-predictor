@@ -19,6 +19,7 @@ from .era5_native.physics import full_pressure, hydrostatic_height
 from .interpolate import DatasetWeather
 from .io import NETCDF_LOCK
 from .schema import G, geometric_height
+from .wrf_rotation import rotation
 
 
 class ColumnCache:
@@ -253,39 +254,45 @@ def wrf_datetimes(nc):
     raise PredictorError("WRF requires Times or XTIME with CF time units.")
 
 
-WRF_REQUIRED = {"U", "V", "T", "P", "PB", "PH", "PHB", "XLAT", "XLONG", "HGT", "COSALPHA", "SINALPHA"}
+WRF_REQUIRED = {"U", "V", "T", "P", "PB", "PH", "PHB", "XLAT", "XLONG", "HGT"}
 
 
-def scan_wrf(root):
+def scan_wrf(root, *, shared=False, wind_reference=None):
     root = Path(root)
     groups, messages = {}, []
     if not root.is_dir():
         return [], [f"WRF directory does not exist: {root}"]
     for path in sorted(root.rglob("wrfout*")):
-        if not path.is_file() or not path.resolve().is_relative_to(root.resolve()):
+        if path.name.endswith((".part", ".tmp", ".download")) or not path.is_file() or not path.resolve().is_relative_to(root.resolve()):
             continue
         try:
             with Dataset(path) as nc:
                 missing = WRF_REQUIRED - set(nc.variables)
                 if missing:
                     raise PredictorError("Missing " + ", ".join(sorted(missing)))
+                # Header-only validation; never decode a weather volume while scanning.
+                rotation(nc.__dict__, np.array([float(getattr(nc, "CEN_LAT", 0))]), np.array([float(getattr(nc, "CEN_LON", 0))]),
+                         np.array([1.]) if "COSALPHA" in nc.variables else None,
+                         np.array([0.]) if "SINALPHA" in nc.variables else None, frame=wind_reference)
                 times = wrf_datetimes(nc)
                 if not times:
                     continue
                 match = re.search(r"(?:^|_)d(\d+)(?:_|\.)", path.name)
                 domain = match.group(1) if match else str(getattr(nc, "GRID_ID", "01"))
-                run = str(getattr(nc, "SIMULATION_START_DATE", getattr(nc, "START_DATE", "unspecified")))
-                group_key = str(path.parent.relative_to(root)) + "|" + domain + "|" + run
-                ident = "wrf-" + hashlib.sha256(group_key.encode()).hexdigest()[:12]
+                run = str(getattr(nc, "parent_cycle_utc", getattr(nc, "SIMULATION_START_DATE", getattr(nc, "START_DATE", "unspecified"))))
+                folder_key = "archive-cycle" if getattr(nc,"parent_cycle_utc",None) else str(path.parent.relative_to(root))
+                group_key = folder_key + "|" + domain + "|" + run
+                ident = ("wrf-shared-" if shared else "wrf-") + hashlib.sha256(group_key.encode()).hexdigest()[:12]
                 folder=str(path.parent.relative_to(root))
-                info = groups.setdefault(ident, {"id": ident, "label": f"WRF · d{domain} · {run}" + (f" · {folder}" if folder!="." else ""),
+                info = groups.setdefault(ident, {"id": ident, "label": f"WRF · d{domain} · {run}" + (f" · {folder}" if folder!="." else "")+(" · shared" if shared else ""),
                     "source": "wrf", "native": True, "available": True, "root": str(root),
                     "records": [], "domain": domain, "run": run, "area": None,
                     "minimum_top_altitude": None, "maximum_altitude": None,
                     "terrain_available": True, "vertical_wind_available": True,
                     "humidity_available": True, "warnings": [],
                     "provenance": {"root": str(root), "domain": domain, "run": run,
-                                   "reader": "direct native WRF columns"}})
+                                   "reader": "direct native WRF columns", "temperature": "(T+300)*(pressure/100000)^(287/1004) K", "pressure": "P+PB Pa", "wind_reference": wind_reference or getattr(nc,"balloon_wind_reference","grid")},
+                    "shared": shared, "read_only": shared})
                 info["vertical_wind_available"] &= "W" in nc.variables
                 info["humidity_available"] &= "QVAPOR" in nc.variables
                 info["records"].extend((t.timestamp(), str(path), i) for i,t in enumerate(times))
@@ -366,7 +373,10 @@ class WRFWeather(NativeWeather):
                 arr = np.ma.filled(var[tuple(sel)], np.nan).astype(float)
                 return np.mean(arr,axis=-1) if dx or dy else arr
             u,v = column("U",dx=True),column("V",dy=True)
-            ca,sa = float(column("COSALPHA")),float(column("SINALPHA"))
+            ca,sa = rotation(nc.__dict__, self.lat[y,x], self.lon[y,x],
+                             column("COSALPHA") if "COSALPHA" in nc.variables else None,
+                             column("SINALPHA") if "SINALPHA" in nc.variables else None,
+                             frame=self.info["provenance"].get("wind_reference"))
             if not np.isfinite(ca+sa) or abs(ca*ca+sa*sa-1) > .01:
                 raise PredictorError("WRF rotation coefficients are invalid.")
             pressure = column("P")+column("PB")
@@ -398,7 +408,12 @@ class NativeCatalog:
     def scan(self):
         with NETCDF_LOCK:
             self.archive = Archive(self.settings.era5_root, self.settings.cache_mb)
-            self.wrf, self.messages = scan_wrf(self.settings.wrf_root)
+            self.wrf, self.messages = scan_wrf(self.settings.wrf_root, wind_reference=self.settings.wrf_wind_reference)
+            common = self.settings.common_weather_root
+            if common and (common / "wrf").resolve() != self.settings.wrf_root.resolve():
+                shared, messages = scan_wrf(common / "wrf", shared=True, wind_reference=self.settings.wrf_wind_reference)
+                self.wrf.extend(shared)
+                self.messages.extend(messages)
             self.cache = ColumnCache(self.settings.cache_mb)
             self.weather = {}
 

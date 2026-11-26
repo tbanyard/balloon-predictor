@@ -21,7 +21,7 @@ SHARED_DATA_ROOT = Path("/data1/tim/BP_Data")
 def personal_data_dir(root, username=None):
     from .errors import PredictorError
     name = os_account() if username is None else username
-    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@-]*\$?", name) or name in (".", ".."):
+    if not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9_.@-]*\$?", name) or name.lower() in (".", "..", "wrf", "ifs", "gfs"):
         raise PredictorError("Cannot use this Unix account name for a personal data folder.")
     target = Path(root).expanduser().resolve() / name
     if target.is_symlink():

@@ -84,9 +84,14 @@ static NSString *const nativeArch = @"x86_64";
 
 - (void)showConnection:(id)sender {
     if (self.chooser && self.origin) {
-        self.web.hidden = YES;
-        self.chooser.hidden = NO;
-        [self.chooser loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:[self.origin.absoluteString stringByAppendingString:@"?splash=done&native=1"]]]];
+        NSString *url=[self.origin.absoluteString stringByAppendingString:@"?splash=done&native=1"];
+        if (![self.chooser.URL.absoluteString isEqual:url]) {
+            [self.chooser loadRequest:[NSURLRequest requestWithURL:[NSURL URLWithString:url]]];
+            self.web.hidden=YES;self.chooser.hidden=NO;
+        } else {
+            NSString *script=self.testRoundtrip ? @"window.BalloonConnection?.showChoices();window.__bpReturnTest=true" : @"window.BalloonConnection?.showChoices()";
+            [self.chooser evaluateJavaScript:script completionHandler:^(id value,NSError *error){self.web.hidden=YES;self.chooser.hidden=NO;}];
+        }
     }
 }
 
@@ -256,7 +261,7 @@ static NSString *const nativeArch = @"x86_64";
     }
     self.origin = origin;
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
-    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.3";
+    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.4";
     config.applicationNameForUserAgent = [NSString stringWithFormat:@"BalloonPredictor/%@ (+https://github.com/tbanyard/balloon-predictor)", version];
     if (self.testRoot) config.websiteDataStore = WKWebsiteDataStore.nonPersistentDataStore;
     self.web = [[WKWebView alloc] initWithFrame:self.window.contentView.bounds configuration:config];

@@ -1,5 +1,6 @@
 "use strict";
 const $ = id => document.getElementById(id);
+let autoSaveTimer=null;const restoredJobs=new Map();
 const STORAGE_KEY = "balloon-predictor-v1.1-setups";
 const numericFields = ["launch_latitude","launch_longitude","launch_altitude","ascent_rate","descent_rate","burst_altitude","landing_altitude","time_step","max_duration_hours","ensemble_members","ascent_sigma","descent_sigma","burst_sigma","wind_sigma","seed"];
 const setupFields = ["dataset","launch_datetime","flight_name","flight_mode","descent_model","landing_mode","use_vertical_wind","ground_source","ground_altitude","below_model_policy",...numericFields,"run_mode","series_duration","series_interval","series_sites","arrival_datetime","arrival_altitude","arrival_rates","arrival_rates_mode","arrival_sites"];
@@ -27,13 +28,16 @@ function fromInput(value){return value?new Date(value+"Z").toISOString():null;}
 function duration(seconds){const m=Math.round(seconds/60);return(m>=60?Math.floor(m/60)+"h ":"")+(m%60)+"m";}
 function utcText(value){return new Date(value).toISOString().replace("T"," ").replace(".000Z"," UTC");}
 async function api(path,options){
+  const savedMatch=path.match(/^\/api\/predictions\/([a-f0-9]{32})(?:\/|$)/);
+  if(savedMatch){const replacement=await ensureServerResult(savedMatch[1]);if(replacement!==savedMatch[1])path=path.replace(savedMatch[1],replacement);}
+  if(options?.method==='POST'&&/^\/api\/predictions(?:\/(?:series|arrival))?$/.test(path))options={...options,headers:{...options.headers,'X-BP-Request-ID':(globalThis.crypto?.randomUUID?.()||Date.now().toString(36)+Math.random().toString(36).slice(2))}};
   let response,data;
-  try{response=await fetch(path,options);}catch(error){
+  try{response=await (window.BalloonNetwork?.request||fetch)(path,options);}catch(error){
+    if(window.BalloonNetwork)throw error;
     throw new Error("Could not reach BalloonPredictor. Check the VPN and SSH connection, and whether the server is still running. A server disk or quota error will be shown here when the server can reply.");
   }
   try{data=await response.json();}catch{throw new Error("The server returned HTTP "+response.status+" without readable details. Check its terminal output or the job log shown in Manage weather → Storage.");}
-  if(response.status===401&&data.login_required)location.replace("/signin");
-  if(!response.ok){const d=data.detail;throw Object.assign(new Error(Array.isArray(d)?d.map(e=>e.loc.slice(1).join(".")+": "+e.msg).join("; "):d||"Request failed."),{details:data.error_details});}
+  if(!response.ok){const d=data.detail;throw Object.assign(new Error(Array.isArray(d)?d.map(e=>e.loc.slice(1).join(".")+": "+e.msg).join("; "):d||"Request failed."),{details:data.error_details,httpStatus:response.status});}
   return data;
 }
 async function poll(id,update){for(;;){const job=await api("/api/jobs/"+id);update(job.message,job.status);if(job.status==="failed")throw Object.assign(new Error(job.error),{details:job.error_details});if(job.status==="completed")return job.result;await new Promise(resolve=>setTimeout(resolve,500));}}
@@ -41,7 +45,7 @@ const weatherOverlay=BalloonWeather.create(map,api,{showMap:()=>window.BalloonWi
 function activeSite(){return sites.find(s=>s.id===activeId);}
 function readSetup(){return Object.fromEntries(setupFields.map(key=>[key,$(key).type==="checkbox"?$(key).checked:$(key).value]));}
 function writeSetup(setup){if(setup.dataset!==undefined&&datasets.length)weatherSelectors(setup.dataset);for(const key of setupFields)if(setup[key]!==undefined){if($(key).type==="checkbox")$(key).checked=Boolean(setup[key]);else $(key).value=setup[key];}}
-function persist(){try{localStorage.setItem(STORAGE_KEY,JSON.stringify({version:1,activeId,sites:sites.map(s=>({id:s.id,setup:s.setup}))}));}catch{}}
+function persist(){clearTimeout(autoSaveTimer);if(window.BalloonFlights)autoSaveTimer=setTimeout(()=>{if(sites.length)BalloonFlights.update(BalloonFlights.pack(sites,activeId));},450);try{localStorage.setItem(STORAGE_KEY,JSON.stringify({version:1,activeId,sites:sites.map(s=>({id:s.id,setup:s.setup}))}));}catch{}}
 function saveCurrent(){const site=activeSite();if(site)site.setup=readSetup();persist();}
 function newSite(setup){return{id:globalThis.crypto?.randomUUID?.()||String(Date.now())+Math.random(),setup:{...setup},revision:0,result:null,series:null,jobId:null,selectedIndex:0,batchSiteIndex:0};}
 function siteEntries(site){return site.series?site.series.flights.filter(e=>e.site_index===site.batchSiteIndex):[];}
@@ -148,7 +152,8 @@ function coverageText(info){
 }
 async function loadDatasets(selectId){
   const response=await api("/api/weather");datasets=response.datasets;
-  $("archive-paths").textContent="ERA5: "+response.defaults.era5_root+" · WRF: "+response.defaults.wrf_root+" · column cache: "+response.defaults.cache_mb+" MB. Edit config.yml to change these paths.";
+  for(const site of sites){const data=selectedResult(site);if(data&&!datasets.some(d=>d.id===data.request.dataset))datasets.push({...data.weather,id:data.request.dataset,available:false,label:data.weather.label+' · saved flight (weather unavailable)'});}
+  $("archive-paths").textContent="ERA5: "+response.defaults.era5_root+" · WRF: "+response.defaults.wrf_root+" · column cache: "+response.defaults.cache_mb+" MB."+(response.defaults.shared_weather_root?" Shared read-only weather: "+response.defaults.shared_weather_root+"/{wrf,ifs,gfs}.":"")+" Edit config.yml to change paths.";
   const defaultId=datasets.some(d=>d.id===response.defaults.dataset)?response.defaults.dataset:"demo";
   const selected=selectId||$("dataset").value||defaultId;$("dataset-list").replaceChildren();
   for(const info of [...datasets.filter(i=>i.id==="era5"),...datasets.filter(i=>i.id!=="era5"&&i.id!=="demo"),...datasets.filter(i=>i.id==="demo")]){
@@ -268,7 +273,7 @@ $("flight-form").onsubmit=async e=>{
     const completed=await poll(job.id,message=>status("flight-status",message,"working"));let accepted=0;
     chosen.forEach((site,i)=>{if(!sites.includes(site)||site.revision!==revisions[i])return;site.jobId=job.id;if(isSeries){site.series=completed;site.batchSiteIndex=i;site.selectedIndex=completed.flights.find(x=>x.site_index===i&&x.status==="completed")?.index??-1;site.result=null;}else{site.result=completed;site.series=null;}accepted++;});
     if(isArrival)$("endpoint-focus").set("burst",true);
-    drawSelected();drawAllMap();fitFlight();
+    drawSelected();drawAllMap();fitFlight();persist();if(accepted&&window.BalloonFlights)BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);
     if(accepted&&window.BalloonWindows)window.BalloonWindows.show("profile-panel");
     status("flight-status",!accepted?"Setup changed during calculation. Calculate again.":isSeries?completed.completed+" of "+completed.total+" balloons completed"+(completed.failed?" · "+completed.failed+" unavailable; see launch list.":""):"Flight complete · "+completed.weather.label);
     const failure=isSeries&&completed.flights.find(entry=>entry.error_details?.code==="missing_dem");
@@ -344,9 +349,11 @@ $("sensitivity-display").onchange=drawAllMap;
 function fitFlight(){const points=allFlights().flatMap(e=>e.result.prediction.filter(s=>preferredTrack!=="ascent"||s.stage==="ascent").flatMap(s=>s.trajectory));if(points.length)map.fitBounds(L.latLngBounds(unwrapped(points)),{padding:[45,45],maxZoom:11});else map.setView(launchMarker.getLatLng(),8);}
 $("fit-button").onclick=fitFlight;$("track-display").onchange=()=>{preferredTrack=$("track-display").value;drawAllMap();};$("endpoint-focus").onchange=()=>{preferredEndpoint=$("endpoint-focus").value;drawSelected();drawAllMap();};
 function drawSeries(site){
-  $("series-launches").replaceChildren();$("series-summary").hidden=!site?.series;$("series-launches").hidden=!site?.series;
-  if(!site?.series)return;const entries=siteEntries(site);$("series-summary").textContent=entries.filter(e=>e.status==="completed").length+" / "+entries.length+" launches available · select a launch below to inspect its profile.";
-  for(const entry of entries){const button=document.createElement("button");button.type="button";button.className="series-launch "+(entry.status==="failed"?"failed":"")+(site.selectedIndex===entry.index?" selected":"");button.textContent=(entry.ascent_rate?entry.ascent_rate+" m/s · ":"")+entry.launch_datetime.slice(5,16).replace("T"," ")+" UTC"+(entry.status==="failed"?" · unavailable":"");button.disabled=entry.status==="failed";button.title=entry.error||"Inspect this launch";button.onclick=()=>{site.selectedIndex=entry.index;drawSelected();drawAllMap();};$("series-launches").append(button);if(entry.status==="failed"){const note=document.createElement("span");note.className="launch-error";note.textContent=entry.error;$("series-launches").append(note);}}
+  $("series-launches").replaceChildren();$("series-summary").hidden=!site?.series;$("series-launches").hidden=!site;
+  if(!site)return;
+  if(!site.series){if(site.result){const select=document.createElement('button');select.className='series-launch selected';select.textContent=utcText(site.result.request.launch_datetime);select.onclick=()=>{drawSelected();drawAllMap();};$("series-launches").append(select);appendLaunchDownload(site,0);}appendAdditionalLaunch();return;}
+  const entries=siteEntries(site);$("series-summary").textContent=entries.filter(e=>e.status==="completed").length+" / "+entries.length+" launches available · select a launch below to inspect its profile.";
+  for(const entry of entries){const button=document.createElement("button");button.type="button";button.className="series-launch "+(entry.status==="failed"?"failed":"")+(site.selectedIndex===entry.index?" selected":"");button.textContent=(entry.ascent_rate?entry.ascent_rate+" m/s · ":"")+entry.launch_datetime.slice(5,16).replace("T"," ")+" UTC"+(entry.status==="failed"?" · unavailable":"");button.disabled=entry.status==="failed";button.title=entry.error||"Inspect this launch";button.onclick=()=>{site.selectedIndex=entry.index;drawSelected();drawAllMap();persist();};$("series-launches").append(button);if(entry.status==="completed")appendLaunchDownload(site,entry.index);if(entry.status==="failed"){const note=document.createElement("span");note.className="launch-error";note.textContent=entry.error;$("series-launches").append(note);}}appendAdditionalLaunch();
 }
 function updateSondeLink(){
   const site=activeSite(),available=Boolean(selectedResult(site)&&site?.jobId);
@@ -528,17 +535,18 @@ $("sounding-open").onclick=()=>{if(window.BalloonWindows)window.BalloonWindows.s
   document.addEventListener("bp:panelshown",event=>{if(event.detail.id==="sounding-panel")scheduleSounding();});
   document.addEventListener("bp:layout",()=>{scheduleSounding();requestAnimationFrame(()=>{if(!$("map-panel").hidden)map.invalidateSize({pan:true,animate:false,debounceMoveend:true});});});
 $("sounding-close").onclick=()=>{soundingToken++;soundingPending=null;if(window.BalloonWindows)window.BalloonWindows.minimise("sounding-panel");else $("sounding-panel").hidden=true;};$("sounding-mode").onchange=refreshSounding;
-function downloadJSON(name,value){const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.6.3",sites:sites.map(s=>({setup:s.setup}))});};
+function downloadJSON(name,value){window.__bpExportFilename=name;const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
+$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.6.4",sites:sites.map(s=>({setup:s.setup}))});};
 $("import-session").onchange=async()=>{
   try{const file=$("import-session").files[0];if(!file)return;if(file.size>1000000)throw new Error("Setup file must be under 1 MB.");const value=JSON.parse(await file.text());if(!Array.isArray(value.sites)||!value.sites.length||value.sites.length>20)throw new Error("Setup file must contain 1–20 launch points.");const defaults=readSetup();const added=value.sites.map(item=>{if(!item.setup||typeof item.setup!=="object")throw new Error("Invalid launch setup.");const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];if(!Number.isFinite(Number(setup.launch_latitude))||Math.abs(Number(setup.launch_latitude))>85||!Number.isFinite(Number(setup.launch_longitude)))throw new Error("Invalid launch coordinates.");return newSite(setup);});sites=added;activeId=sites[0].id;writeSetup(sites[0].setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();toast("Launch setups loaded.");}catch(e){status("flight-status",e.message,"error");}finally{$("import-session").value="";}
 };
 async function initialize(){
   $("launch_datetime").value=utcInput(new Date());$("arrival_datetime").value=utcInput(new Date(Date.now()+3*3600000));$("download-source").onchange();
   try{
-    const params=new URLSearchParams(location.search);let saved=null;try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY));}catch{}
+    const params=new URLSearchParams(location.search);let fullSaved=null;try{fullSaved=(await window.BalloonFlights?.load())?.workspace;}catch{}let saved=null;try{saved=JSON.parse(localStorage.getItem(STORAGE_KEY));}catch{}
     if(saved?.sites?.length&&saved.sites.length<=20){const defaults=readSetup();sites=saved.sites.map(s=>({...newSite({...defaults,...s.setup}),id:typeof s.id==="string"?s.id:newSite(defaults).id}));activeId=sites.some(s=>s.id===saved.activeId)?saved.activeId:sites[0].id;writeSetup(activeSite().setup);}
-    await loadDatasets(params.get("dataset")||activeSite()?.setup.dataset);
+    if(fullSaved&&!params.has("launch_latitude")){restoreFlights(fullSaved,false);}
+    try{await loadDatasets(params.get("dataset")||activeSite()?.setup.dataset);}catch(error){if(!fullSaved)throw error;status("flight-status","Saved flights opened. Connect to load weather or calculate.");}
     for(const[key,value]of params)if(key!=="dataset"&&setupFields.includes(key)){const field=$(key);if(key==="launch_datetime")field.value=utcInput(value);else if(field.type==="checkbox")field.checked=value==="true";else field.value=value;}
     if(!sites.length){const site=newSite(readSetup());sites=[site];activeId=site.id;}else activeSite().setup=readSetup();
     updateFields();$("descent_model").onchange();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();
@@ -640,4 +648,52 @@ $("offline-pack").onclick=async()=>{
     output.replaceChildren(link);link.click();
   }catch(error){if(current())output.textContent=error.message;}
   finally{if(button.dataset.working===key)delete button.dataset.working;if(current())button.disabled=false;}
+};
+
+function launchDocument(site,index=site.selectedIndex){
+  const data=site.series?siteEntries(site).find(entry=>entry.index===index)?.result:site.result;
+  if(!data)throw Error('Choose a completed launch.');
+  const one={...site,setup:{...site.setup,launch_datetime:utcInput(data.request.launch_datetime)},result:data,series:null,jobId:null,selectedIndex:0,batchSiteIndex:0};
+  return BalloonFlights.pack([one],one.id);
+}
+function appendLaunchDownload(site,index){const button=document.createElement('button');button.type='button';button.className='launch-download';button.textContent='↓';button.title='Download this launch for reopening';button.setAttribute('aria-label',button.title);button.onclick=()=>BalloonFlights.download(launchDocument(site,index));$('series-launches').append(button);}
+function appendAdditionalLaunch(){const button=document.createElement('button');button.type='button';button.className='launch-add';button.textContent='+';button.title='Add another launch at this point';button.setAttribute('aria-label',button.title);button.disabled=running;button.onclick=()=>{const flight=selectedResult();$('additional-launch-time').value=utcInput(new Date(Date.parse(flight?.request.launch_datetime||fromInput($('launch_datetime').value))+3600000));$('additional-launch-status').textContent='';$('additional-launch-dialog').showModal();};$('series-launches').append(button);}
+function restoreFlights(document,visible=true){
+  const saved=BalloonFlights.validate(document),defaults=readSetup();
+  sites=saved.sites.map(item=>{const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];const site=newSite(setup),calculation=saved.calculations[item.calculation];site.id=typeof item.id==='string'?item.id:site.id;
+    site.jobId=calculation?(/^[a-f0-9]{32}$/.test(item.jobId||'')?item.jobId:(globalThis.crypto?.randomUUID?.()||'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/x/g,()=>Math.floor(Math.random()*16).toString(16))).replaceAll('-','')):null;
+    site.batchSiteIndex=Number.isInteger(item.batchSiteIndex)?item.batchSiteIndex:0;site.selectedIndex=Number.isInteger(item.selectedIndex)?item.selectedIndex:0;site.restorePending=Boolean(calculation);
+    if(calculation?.flights){site.series=calculation;if(!siteEntries(site).some(e=>e.index===site.selectedIndex&&e.status==='completed'))site.selectedIndex=siteEntries(site).find(e=>e.status==='completed')?.index??-1;}else if(calculation)site.result=calculation;return site;});
+  activeId=sites.some(s=>s.id===saved.activeId)?saved.activeId:sites[0].id;writeSetup(activeSite().setup);
+  if(visible){$('sounding-mode').value='ascent';$('weather-overlay-show').checked=false;$('weather-overlay-show').dispatchEvent(new Event('change'));updateFields();datasetChanged(false);drawSelected();drawAllMap();fitFlight();persist();status('flight-status','Saved flights opened · weather loads when requested.');window.BalloonWindows?.show('profile-panel');}
+}
+async function ensureServerResult(original){
+  if(restoredJobs.has(original))return restoredJobs.get(original);
+  const site=sites.find(s=>s.jobId===original&&s.restorePending);if(!site)return original;
+  const value=site.series||site.result;
+  // Restoration is requested only by a weather/export action; simply opening
+  // the file draws its stored results without an API call or recalculation.
+  try{await api('/api/jobs/'+original);for(const other of sites)if(other.jobId===original)other.restorePending=false;return original;}catch(error){if(error.httpStatus!==404)throw error;}
+  const restored=await api('/api/flights/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({result:value})});
+  restoredJobs.set(original,restored.id);for(const other of sites)if(other.jobId===original){other.jobId=restored.id;other.restorePending=false;}
+  persist();return restored.id;
+}
+$('save-selected-flight').onclick=()=>{saveCurrent();BalloonFlights.download(launchDocument(activeSite()));};
+$('save-all-flights').onclick=()=>{saveCurrent();BalloonFlights.download(BalloonFlights.pack(sites,activeId),'balloon-flights.bpflight');};
+$('open-flight').onchange=async()=>{try{const file=$('open-flight').files[0];if(!file)return;if(running)throw Error('Wait for the current calculation to finish before opening flights.');if(file.size>BalloonFlights.MAX)throw Error('Saved flights must be under 32 MB.');saveCurrent();await BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);restoreFlights(JSON.parse(await file.text()));await BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);}catch(error){status('flight-status',error.message,'error');}finally{$('open-flight').value='';}};
+$('recent-flights-open').onclick=async()=>{const value=await BalloonFlights.load(),list=$('recent-flights-list');list.replaceChildren();for(const entry of value.recent||[]){const button=document.createElement('button');button.className='button quiet';button.textContent=utcText(entry.saved)+' · '+entry.label;button.onclick=()=>{if(running){toast('Wait for the calculation to finish.');return;}restoreFlights(entry.document);$('recent-flights-dialog').close();};list.append(button);}if(!list.childNodes.length)list.textContent='Completed launches will appear here automatically.';$('recent-flights-dialog').showModal();};
+document.addEventListener('bp:saveerror',event=>$('flight-save-status').textContent=event.detail);
+$('cancel-additional-launch').onclick=()=>{if(!running)$('additional-launch-dialog').close();};
+$('additional-launch-form').onsubmit=async event=>{
+  event.preventDefault();if(running)return;const site=activeSite(),revision=site.revision,setup={...site.setup,launch_datetime:$('additional-launch-time').value};
+  running=true;$('calculate-additional-launch').disabled=true;window.BalloonUI?.predictionBusy(true);
+  try{const job=await api('/api/predictions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(requestFromSetup(setup))});const completed=await poll(job.id,text=>$('additional-launch-status').textContent=text);
+    if(!sites.includes(site)||revision!==site.revision)throw Error('The launch setup changed while calculating.');
+    const entries=site.series?siteEntries(site).map((entry,index)=>({...entry,index,site_index:0})):site.result?[{index:0,site_index:0,status:'completed',launch_datetime:site.result.request.launch_datetime,result:site.result}]:[];
+    entries.push({index:entries.length,site_index:0,status:'completed',launch_datetime:completed.request.launch_datetime,result:completed});
+    entries.sort((a,b)=>a.launch_datetime.localeCompare(b.launch_datetime));entries.forEach((entry,index)=>{entry.index=index;entry.flight_name=entry.flight_name||entry.result?.request.flight_name||site.setup.flight_name;});
+    site.series={type:'series',flights:entries,total:entries.length,completed:entries.filter(e=>e.status==='completed').length,failed:entries.filter(e=>e.status==='failed').length,schedule_type:'manual'};site.result=null;site.batchSiteIndex=0;site.selectedIndex=entries.find(e=>e.result===completed).index;
+    site.jobId=(globalThis.crypto?.randomUUID?.()||job.id).replaceAll('-','');site.restorePending=true;
+    drawSelected();drawAllMap();fitFlight();persist();await BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);$('additional-launch-dialog').close();status('flight-status','Additional launch calculated · existing tracks kept.');
+  }catch(error){$('additional-launch-status').textContent=error.message;}finally{running=false;$('calculate-additional-launch').disabled=false;window.BalloonUI?.predictionBusy(false);}
 };

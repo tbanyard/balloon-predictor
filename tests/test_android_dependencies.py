@@ -38,7 +38,7 @@ def test_cold_build_uses_the_mirror_then_reuses_verified_bytes(tmp_path, monkeyp
     def download(request, timeout):
         calls.append(request)
         assert timeout == 60
-        assert request.get_header('User-agent').startswith('BalloonPredictor/1.6.3 build ')
+        assert request.get_header('User-agent').startswith('BalloonPredictor/1.6.4 build ')
         return BytesIO(DATA)
     monkeypatch.setattr(build, 'urlopen', download)
     assert build.download_jar('fixture', URL, HASH, work, cache).read_bytes() == DATA

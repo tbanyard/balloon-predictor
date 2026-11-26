@@ -77,7 +77,16 @@ class Settings:
     web_login_ssh_port: int = 22
     web_login_host_key_file: Path | None = None
 
+    wrf_wind_reference: str | None = None
+
+    @property
+    def common_weather_root(self):
+        root = self.shared_data_root
+        return root if root and root.is_dir() else None
+
     def __post_init__(self):
+        if self.wrf_wind_reference not in (None, "grid", "earth"):
+            raise ValueError("wrf_wind_reference must be grid or earth")
         if self.era5_root is None:
             legacy = Path("/data3/ERA5")
             self.era5_root = legacy if legacy.is_dir() else self.data_dir / "era5"
@@ -116,7 +125,8 @@ class Settings:
                    root("shared_data_root", "BP_SHARED_DATA_ROOT", str(SHARED_DATA_ROOT)),
                    None,
                    int(os.environ.get("BP_WEB_LOGIN_SSH_PORT", config.get("web_login_ssh_port", 22))),
-                   root("web_login_host_key_file", "BP_WEB_LOGIN_HOST_KEY_FILE"))
+                   root("web_login_host_key_file", "BP_WEB_LOGIN_HOST_KEY_FILE"),
+                   config.get("wrf_wind_reference"))
 
     def prepare(self):
         from .disk import storage_failure

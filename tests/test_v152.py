@@ -144,7 +144,7 @@ def test_shared_server_verifies_peer_and_isolates_workspaces(tmp_path):
 
 def assert_shared_workspaces(tmp_path):
     settings = Settings(tmp_path / "owner", shared_server=True, shared_data_root=tmp_path / "BP_Data", workers=2)
-    shared = SharedServer(settings, 8008)
+    shared = SharedServer(settings, 8009)
     # Exercise the HTTP boundary independently of the Unix listener. The
     # listener itself is tested below on hosts which permit Unix sockets.
     shared.start = lambda: None
@@ -188,7 +188,7 @@ def test_identity_broker_uses_kernel_credentials():
         pytest.skip("Linux peer credentials required")
     with TemporaryDirectory(prefix="p-", dir=Path(__file__).resolve().parents[2]) as short:
         root = Path(short)
-        shared = SharedServer(Settings(root / "owner", shared_data_root=root / "users"), 8008)
+        shared = SharedServer(Settings(root / "owner", shared_data_root=root / "users"), 8009)
         try:
             shared.start()
         except PermissionError:

@@ -6,16 +6,17 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import time
 from tempfile import TemporaryDirectory
 
 REPO = "tbanyard/balloon-predictor"
 REMOTE = "https://github.com/" + REPO + ".git"
-BRANCH, VERSION = "release-v1.6.3-test", "1.6.3"
+BRANCH, VERSION = "release-v1.6.4-test", "1.6.4"
 PLATFORMS = {
-    "Windows installer (test)": ("BalloonPredictor-Windows-x64-test", "BalloonPredictor-1.6.3-Windows-x64-Setup.exe"),
-    "macOS installer (test)": ("BalloonPredictor-macOS-Universal-test", "BalloonPredictor-1.6.3-macOS-Universal.dmg"),
-    "Android app (test)": ("BalloonPredictor-Android-test", "BalloonPredictor-1.6.3-Android.apk"),
-    "Debian installer (test)": ("BalloonPredictor-Debian-amd64-test", "BalloonPredictor-1.6.3-Debian-amd64.deb"),
+    "Windows installer (test)": ("BalloonPredictor-Windows-x64-test", "BalloonPredictor-1.6.4-Windows-x64-Setup.exe"),
+    "macOS installer (test)": ("BalloonPredictor-macOS-Universal-test", "BalloonPredictor-1.6.4-macOS-Universal.dmg"),
+    "Android app (test)": ("BalloonPredictor-Android-test", "BalloonPredictor-1.6.4-Android.apk"),
+    "Debian installer (test)": ("BalloonPredictor-Debian-amd64-test", "BalloonPredictor-1.6.4-Debian-amd64.deb"),
 }
 WORKFLOW_NAMES = {
     ".github/workflows/tests.yml": "Python and browser checks",
@@ -91,9 +92,36 @@ def verify_artifact(folder, filename, commit):
     return binary, value
 
 
+def collect_artifact(folder, artifact, filename, commit, run_id):
+    output=folder.parent
+    try:
+        binary, report = verify_artifact(folder, filename, commit)
+    except (ValueError, OSError):
+        # Never reuse a partial archive after a connection timeout. Only
+        # complete, checksum-verified downloads replace the output folder.
+        with TemporaryDirectory(prefix=artifact+"-download-", dir=output) as temporary:
+            download=Path(temporary)/"contents"
+            for attempt in range(3):
+                download.mkdir()
+                try:
+                    run("gh", "run", "download", str(run_id), "--repo", REPO,
+                        "--name", artifact, "--dir", str(download), timeout=900)
+                    verify_artifact(download, filename, commit)
+                    break
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+                    shutil.rmtree(download, ignore_errors=True)
+                    if attempt==2:raise
+                    print(f"Download interrupted; retrying {artifact} ({attempt+2}/3)…", flush=True)
+                    time.sleep(5*(attempt+1))
+            if folder.exists():shutil.rmtree(folder)
+            download.replace(folder)
+        binary, report = verify_artifact(folder, filename, commit)
+    return binary,report
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path("balloon-v1.6.3-release"))
+    parser.add_argument("--output", type=Path, default=Path.home()/"balloon-predictor-releases"/"v1.6.4")
     parser.add_argument("--publish", action="store_true", help="Publish the release and fast-forward main after verification.")
     parser.add_argument("--allow-test-apk", action="store_true", help="Allow a temporarily signed APK in a draft release.")
     parser.add_argument("--check-only", action="store_true", help="Download and verify files without changing GitHub.")
@@ -108,10 +136,7 @@ def main():
     assets, metadata = [], {}
     for name, (artifact, filename) in PLATFORMS.items():
         folder = output / artifact
-        if not folder.exists():
-            run("gh", "run", "download", str(selected[name]["databaseId"]), "--repo", REPO,
-                "--name", artifact, "--dir", str(folder))
-        binary, report = verify_artifact(folder, filename, commit)
+        binary, report = collect_artifact(folder, artifact, filename, commit, selected[name]["databaseId"])
         assets.append(binary)
         metadata[name] = report
         if filename.endswith(".dmg"):
@@ -122,14 +147,14 @@ def main():
         if filename.endswith(".apk") and report.get("signing") != "release":
             if args.publish or not args.allow_test_apk:
                 raise ValueError("This APK uses a temporary test key. Run setup-android-signing.sh before preparing a fresh test commit, or use --allow-test-apk for a draft that can be installed for testing. Google Play is not required.")
-    source_zip = output / "balloon-predictor-v1.6.3.zip"
+    source_zip = output / "balloon-predictor-v1.6.4.zip"
     with TemporaryDirectory(prefix="source-", dir=output) as work:
         checkout = Path(work) / "repo"
         run("git", "clone", "--quiet", "--no-tags", "--single-branch", "--branch", BRANCH, REMOTE, str(checkout))
         actual = run("git", "rev-parse", "HEAD", cwd=checkout, capture_output=True).stdout.strip()
         if actual != commit:
             raise ValueError("The test branch moved while files were being verified. Rerun to use its new commit.")
-        run("git", "archive", "--format=zip", "--prefix=balloon-predictor-v1.6.3/",
+        run("git", "archive", "--format=zip", "--prefix=balloon-predictor-v1.6.4/",
             "--output", str(source_zip), commit, cwd=checkout)
         assets.append(source_zip)
         summary = output / "BUILD-REPORT.json"
@@ -145,7 +170,7 @@ def main():
         # A draft is reviewable; main advances only when --publish is explicit.
         tag = "v" + VERSION
         notes = output / "RELEASE-NOTES.md"
-        notes.write_text((checkout / "docs/V1.6.3.md").read_text(), encoding="utf-8")
+        notes.write_text((checkout / "docs/V1.6.4.md").read_text(), encoding="utf-8")
         refs = run("git", "ls-remote", REMOTE, f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}",
                    capture_output=True).stdout.splitlines()
         tagged = next((line.split()[0] for line in refs if line.endswith("^{}")), refs[0].split()[0] if refs else None)
@@ -162,7 +187,7 @@ def main():
             run("gh", "release", "upload", tag, "--repo", REPO, "--clobber", *(str(file) for file in assets))
         else:
             run("gh", "release", "create", tag, "--repo", REPO, "--target", commit, "--draft",
-                "--title", "BalloonPredictor v1.6.3", "--notes-file", str(notes), *(str(file) for file in assets))
+                "--title", "BalloonPredictor v1.6.4", "--notes-file", str(notes), *(str(file) for file in assets))
         if args.publish:
             if not tagged:
                 run("git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential",
@@ -181,6 +206,6 @@ def main():
 if __name__ == "__main__":
     try:
         raise SystemExit(main())
-    except (ValueError, OSError, subprocess.CalledProcessError) as error:
+    except (ValueError, OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as error:
         print(f"Stopped: {error}", file=sys.stderr)
         raise SystemExit(1)

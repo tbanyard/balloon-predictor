@@ -130,7 +130,8 @@ def wrf_block(weather, ti, ys, xs):
                 else: raise PredictorError(f"Unsupported WRF export dimension {dim}.")
             return np.ma.filled(var[tuple(selectors)],np.nan).astype(float)
         u,v=read("U"),read("V"); u=(u[...,:-1]+u[...,1:])/2; v=(v[...,:-1,:]+v[...,1:,:])/2
-        ca,sa=read("COSALPHA"),read("SINALPHA")
+        from .weather.wrf_rotation import rotation
+        ca,sa=rotation(nc.__dict__, read("XLAT"), read("XLONG"), read("COSALPHA") if "COSALPHA" in nc.variables else None, read("SINALPHA") if "SINALPHA" in nc.variables else None, frame=weather.info["provenance"].get("wind_reference"))
         p=read("P")+read("PB"); h=(read("PH")+read("PHB"))/9.81
         fields={"u":u*ca-v*sa,"v":v*ca+u*sa,"temperature":(read("T")+300)*(p/100000)**(287/1004),"pressure":p,"height":(h[:-1]+h[1:])/2}
         if "W" in nc.variables:
@@ -143,6 +144,18 @@ def wrf_block(weather, ti, ys, xs):
             surface.update(surface_u=a*ca-b*sa,surface_v=b*ca+a*sa,surface_temperature=read("T2"),surface_pressure=read("PSFC"))
             if "Q2" in nc.variables:
                 r=read("Q2"); surface["surface_specific_humidity"]=np.where(r>=0,r/(1+r),np.nan)
+        return fields,surface
+
+
+
+def normalized_block(weather,ti,ys,xs):
+    with Dataset(weather.source_path) as nc:
+        def read(var):
+            return np.ma.asarray(var[tuple(ti if d=="time" else ys if d=="y" else xs if d=="x" else slice(None) for d in var.dimensions)],dtype=float).filled(np.nan)
+        fields={key:read(nc[key]) for key in ("u","v","height","temperature","pressure","w","specific_humidity") if key in nc.variables}
+        surface={"terrain":read(nc["terrain"]) if "terrain" in nc.variables else np.full((len(ys),len(xs)),-10000.)}
+        if "terrain" in nc.variables:
+            surface.update({key:read(nc[key]) for key in ("surface_u","surface_v","surface_temperature","surface_pressure","surface_specific_humidity") if key in nc.variables})
         return fields,surface
 
 

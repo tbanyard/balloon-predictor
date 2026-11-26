@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BalloonPredictor v1.6.3</title>
+  <title>BalloonPredictor v1.6.4</title>
   <link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css">
   <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg?v=1.4">
   <link rel="stylesheet" href="/assets/style.css">
@@ -16,11 +16,13 @@
   <script src="/assets/trajectory-tools.js" defer></script>
   <script src="/assets/weather-overlay.js" defer></script>
   <link rel="stylesheet" href="/assets/datetime.css"><script src="/assets/datetime.js" defer></script>
+  <script src="/assets/connection.js" defer></script>
+  <script src="/assets/flights.js" defer></script>
   <script src="/assets/app.js" defer></script>
 </head>
 <body>
   <header class="topbar">
-    <div class="brand"><svg width="30" height="35" viewBox="0 0 30 35" aria-hidden="true"><path d="M15 2C7 2 3 8 5 15c1 5 6 9 8 12h4c2-3 7-7 8-12C27 8 23 2 15 2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 5c-4 8 0 15 5 22m5-22c4 8 0 15-5 22M12 31h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Balloon<strong>Predictor</strong><span class="version">v1.6.3</span><small>ATMOSPHERIC FLIGHT LAB</small></span></div>
+    <div class="brand"><svg width="30" height="35" viewBox="0 0 30 35" aria-hidden="true"><path d="M15 2C7 2 3 8 5 15c1 5 6 9 8 12h4c2-3 7-7 8-12C27 8 23 2 15 2Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M10 5c-4 8 0 15 5 22m5-22c4 8 0 15-5 22M12 31h6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><span>Balloon<strong>Predictor</strong><span class="version">v1.6.4</span><small>ATMOSPHERIC FLIGHT LAB</small></span></div>
     <div class="header-right"><span class="local-indicator"><i></i> Local workspace</span><button id="weather-open" class="button quiet">Manage weather <span>↗</span></button><a class="api-link" title="API documentation: run predictions and retrieve data from scripts" href="/docs" target="_blank" rel="noopener">API</a></div>
   </header>
   <main class="workspace" id="workspace">
@@ -75,7 +77,7 @@
         <div class="calculation-progress" id="calculation-progress"><span class="balloon-loader" data-balloon-loader="flight" hidden aria-hidden="true"></span><div id="flight-status" class="status-message" role="status" aria-live="polite">Ready to explore.</div></div>
         <div class="dem-recovery" id="flight-dem-action" hidden><button type="button" class="button quiet" id="flight-dem-download"></button></div>
       </form>
-      <div class="sidebar-footer">ERA5 / ERA5T / ECMWF IFS / GFS / WRF<br>Independent experimental predictor · v1.6.3</div>
+      <div class="sidebar-footer">ERA5 / ERA5T / ECMWF IFS / GFS / WRF<br>Independent experimental predictor · v1.6.4</div>
     </aside>
     <section class="visuals">
       <div class="map-toolbar">
@@ -121,7 +123,7 @@
           <label for="weather-overlay-opacity"><span class="weather-opacity-label">Field opacity <output id="weather-opacity-value" for="weather-overlay-opacity">55%</output></span><input id="weather-overlay-opacity" type="range" min="0" max="100" step="5" value="55"></label>
           <label class="weather-flow"><input id="weather-overlay-wind" type="checkbox" checked> Animated wind</label>
         </div>
-        <details class="weather-colour-options"><summary>Colour range</summary><label for="weather-range-mode">Colour scale<select id="weather-range-mode"><option value="auto">Auto · full layer</option><option value="view">Auto · visible window</option><option value="fixed">Fixed limits</option></select></label><div class="weather-limit-fields"><label for="weather-range-min">Minimum<input id="weather-range-min" type="number" step="any" value="0"></label><label for="weather-range-max">Maximum<input id="weather-range-max" type="number" step="any" value="30"></label></div><p class="field-note">Automatic scales use the 2–98% range. Visible-window scaling follows pan and zoom. Fixed limits keep colours comparable across times.</p><p id="weather-range-error" class="field-note" role="status"></p></details>
+        <details class="weather-colour-options"><summary>Colour range</summary><label for="weather-range-mode">Colour scale<select id="weather-range-mode"><option value="auto">Auto · full layer</option><option value="view" selected>Auto · visible window</option><option value="fixed">Fixed limits</option></select></label><div class="weather-limit-fields"><label for="weather-range-min">Minimum<input id="weather-range-min" type="number" step="any" value="0"></label><label for="weather-range-max">Maximum<input id="weather-range-max" type="number" step="any" value="30"></label></div><p class="field-note">Automatic scales use the 2–98% range. Visible-window scaling follows pan and zoom. Fixed limits keep colours comparable across times.</p><p id="weather-range-error" class="field-note" role="status"></p></details>
         <div class="weather-overlay-actions"><button id="weather-overlay-map" type="button" class="text-button">Show map ↗</button></div>
         <div id="weather-overlay-status" class="download-status" role="status" aria-live="polite"></div>
         <div id="weather-overlay-legend" class="weather-overlay-legend" hidden><strong id="weather-legend-title"></strong><div id="weather-legend-colours"></div><div class="weather-legend-values"><span id="weather-legend-low"></span><span id="weather-legend-high"></span></div></div>
@@ -132,7 +134,7 @@
       <section id="sounding-panel" data-window-title="Flight Profile" class="sounding-panel plot-window" hidden aria-label="Flight Profile: Skew-T and winds along the flight"><div class="sounding-heading" data-window-handle><div><span class="eyebrow">FLIGHT PROFILE</span><h2>The atmosphere along your flight.</h2></div><button id="sounding-close" class="close-button" aria-label="Minimise Flight Profile">×</button></div><div class="sounding-controls"><label class="sr-only" for="sounding-mode">Sounding location</label><select id="sounding-mode"><option value="ascent">Along the predicted ascent</option><option value="launch">Fixed launch column</option></select><a id="sounding-popout" target="_blank" rel="noopener">Open in a separate window ↗</a><a id="sounding-csv">CSV ↓</a></div><label class="profile-link-zoom"><input id="link-profile-zoom" type="checkbox" checked> Link vertical zoom</label><p id="sounding-note" class="field-note"></p><div class="sounding-plots"><div><h3>Skew-T · temperature &amp; dew point</h3><svg id="skewt-chart" viewBox="0 0 720 620" role="img" aria-label="Skew-T temperature and dew point"></svg></div><div><h3>Wind components</h3><svg id="uv-chart" viewBox="0 0 440 620" role="img" aria-label="Eastward u and northward v wind profiles"></svg></div></div><p class="profile-plot-note">Pressure is on the left and model-derived altitude is on the right of both plots. Wind barbs: short feather 5 kt · long feather 10 kt · triangle 50 kt. Scroll or pinch to zoom; drag to pan; Reset restores the full profile.</p><div class="sounding-legend"><span><i class="temp-key"></i>Temperature</span><span><i class="dew-key"></i>Dew point</span><span><i class="u-key"></i>u · eastward</span><span><i class="v-key"></i>v · northward</span></div></section>
       <div class="result-panel plot-window" id="profile-panel" data-window-title="Flight Details">
         <div class="result-header" data-window-handle><span class="eyebrow">FLIGHT DETAILS</span><div id="exports" class="export-buttons" hidden><span>Export</span><a data-format="csv">CSV</a><a data-format="geojson">GeoJSON</a><a data-format="kml">KML</a><a data-format="json">JSON</a></div></div>
-        <div class="flight-tabs" id="flight-tabs" role="tablist" aria-label="Launch points"></div><div id="series-summary" class="series-summary" hidden></div><div id="series-launches" class="series-launches" hidden></div>        <div id="arrival-results" class="arrival-results" hidden></div>
+        <div class="flight-tabs" id="flight-tabs" role="tablist" aria-label="Launch points"></div><div id="series-summary" class="series-summary" hidden></div><div id="series-launches" class="series-launches" hidden></div>        <div class="saved-flight-tools"><label class="button quiet session-load" for="open-flight">Open saved flights ↑<input id="open-flight" type="file" accept=".bpflight,application/json" hidden></label><button id="recent-flights-open" class="button quiet" type="button">Recent flights</button><span id="flight-save-status" role="status"></span></div><div id="arrival-results" class="arrival-results" hidden></div>
         <div id="empty-result" class="empty-result"><div class="empty-icon">↗</div><div><h3>Your flight starts here.</h3><p>Choose an available ERA5 day or WRF run, then calculate.</p></div><span class="empty-coordinate">52.817°N &nbsp; 4.125°W</span></div>
         <div id="flight-result" hidden>
           <div class="metrics"><div><span id="metric-endpoint-label">LANDING</span><strong id="metric-landing">—</strong><small id="metric-landing-time"></small></div><div><span>FLIGHT TIME</span><strong id="metric-duration">—</strong><small id="metric-stages"></small></div><div><span>DRIFT FROM LAUNCH</span><strong id="metric-drift">—</strong><small id="metric-burst"></small></div></div>
@@ -140,6 +142,7 @@
           <details id="warnings"><summary>Model notes &amp; data origins</summary><ul id="warning-list"></ul><p class="field-note">Data origins show the weather model, forecast run or source files, and how the data was processed.</p><pre id="data-origins"></pre></details>
         </div>
         <section id="netcdf-exports" class="netcdf-exports" aria-label="NetCDF downloads" hidden>
+          <article class="saved-flight-card"><h3>Saved flight</h3><p>Keep the calculated tracks, sensitivity members and profiles for reopening. Weather data is loaded separately when you request it.</p><button id="save-selected-flight" type="button" class="button">Download selected launch ↓</button><button id="save-all-flights" type="button" class="button">Download all open launches ↓</button></article>
           <article class="netcdf-export-card model-export-card" aria-labelledby="model-box-title">
             <h3 id="model-box-title">Model box NetCDF</h3>
             <p class="field-note">The weather fields around your tracks, including all available heights and bracketing model times. Margin: at least 0.5° or 50 km, within available data.</p>
@@ -166,6 +169,8 @@
     </div>
     </section>
   </main>
+  <dialog id="recent-flights-dialog"><h2>Recent flights</h2><p>Saved on this device. Opening these tracks does not reload weather.</p><div id="recent-flights-list"></div><form method="dialog"><button class="button quiet">Close</button></form></dialog>
+  <dialog id="additional-launch-dialog"><h2>Add a launch</h2><p>Calculate another launch at this point and keep the existing tracks.</p><form id="additional-launch-form"><label for="additional-launch-time">Launch date &amp; time (UTC)<input id="additional-launch-time" type="datetime-local" step="1" required></label><p id="additional-launch-status" role="status"></p><button class="button primary" id="calculate-additional-launch">Calculate and add</button><button class="button quiet" id="cancel-additional-launch" type="button">Cancel</button></form></dialog>
   <dialog id="move-launch-dialog" class="move-launch-dialog" aria-labelledby="move-launch-title"><form method="dialog"><span class="eyebrow">MOVE LAUNCH POINT</span><h2 id="move-launch-title">Replace this launch location?</h2><p id="move-launch-description"></p><p class="field-note">Other launch points and their tracks will stay in place.</p><div class="dialog-actions"><button class="button quiet" value="cancel" autofocus>Keep current location</button><button class="button primary" value="move" id="confirm-launch-move">Move &amp; clear these tracks</button></div></form></dialog>
   <dialog id="large-download-dialog" class="move-launch-dialog" aria-labelledby="large-download-title"><form method="dialog"><span class="eyebrow">LARGER WEATHER DOWNLOAD</span><h2 id="large-download-title">Download more than 72 hours?</h2><p id="large-download-description"></p><p class="field-note">Forecast availability and the configured storage limits still apply.</p><div class="dialog-actions"><button type="submit" class="button quiet" value="cancel" autofocus>Cancel</button><button type="submit" class="button primary" value="download">Continue download</button></div></form></dialog>
   <dialog id="weather-dialog">

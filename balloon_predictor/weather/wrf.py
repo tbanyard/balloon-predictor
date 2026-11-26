@@ -7,6 +7,7 @@ import xarray as xr
 
 from ..errors import PredictorError
 from .schema import dataset_from_arrays
+from .wrf_rotation import rotation
 
 
 def destagger(values, axis):
@@ -40,7 +41,7 @@ def wrf_times(ds):
 def read_wrf(paths, area=None, start=None, end=None, attrs=None):
     snapshots = []
     latitude = longitude = terrain = None
-    warnings = ["WRF winds are destaggered and rotated with COSALPHA/SINALPHA. Heights use (PH+PHB)/9.81 on mass levels.",
+    warnings = ["WRF winds are destaggered and expressed east/north using COSALPHA/SINALPHA or Lambert projection, unless marked earth-relative. Heights use (PH+PHB)/9.81 on mass levels.",
                 "WRF terrain is the model terrain; dry density uses pressure and temperature without moisture correction."]
     for path in paths:
         with xr.open_dataset(path, engine="netcdf4", decode_times=False) as ds:
@@ -48,8 +49,6 @@ def read_wrf(paths, area=None, start=None, end=None, attrs=None):
             missing = [name for name in required if name not in ds]
             if missing:
                 raise PredictorError("WRF file is missing " + ", ".join(missing) + ". Supply native WRF-ARW wrfout files.")
-            if "COSALPHA" not in ds or "SINALPHA" not in ds:
-                raise PredictorError("WRF COSALPHA and SINALPHA are required to rotate winds; add them to your output.")
             times = wrf_times(ds)
             for ti, time in enumerate(times):
                 if start is not None and time < start or end is not None and time > end:
@@ -91,7 +90,7 @@ def read_wrf(paths, area=None, start=None, end=None, attrs=None):
                         raise PredictorError("WRF terrain changes across files.")
                 latitude, longitude, terrain = lat, lon, hgt
                 u, v = destagger(cropped("U"), -1), destagger(cropped("V"), -2)
-                ca, sa = cropped("COSALPHA"), cropped("SINALPHA")
+                ca, sa = rotation(ds.attrs, lat, lon, cropped("COSALPHA") if "COSALPHA" in ds else None, cropped("SINALPHA") if "SINALPHA" in ds else None)
                 if not np.allclose(ca * ca + sa * sa, 1, atol=0.01):
                     raise PredictorError("WRF rotation coefficients are invalid.")
                 pressure = cropped("P") + cropped("PB")

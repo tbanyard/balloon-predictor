@@ -160,8 +160,9 @@ def build(args, work):
     shutil.copytree(HERE / "offline", assets / "offline")
     shutil.copytree(ROOT / "frontend/vendor/leaflet", assets / "offline-assets/vendor/leaflet")
     shutil.copy2(ROOT / "frontend/coastlines.js", assets / "offline-assets/coastlines.js")
+    shutil.copy2(ROOT / "frontend/offline-map.js", assets / "offline-assets/offline-map.js")
 
-    for name in ("datetime.js", "datetime.css"):
+    for name in ("datetime.js", "datetime.css", "flights.js"):
         shutil.copy2(ROOT / "frontend" / name, assets / "offline-assets" / name)
 
     def apk(folder, base, output, sources, dependencies=(), classpath=()):

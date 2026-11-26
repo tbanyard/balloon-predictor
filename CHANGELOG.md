@@ -1,3 +1,11 @@
+## v1.6.4
+
+- Keep a stable local origin while SSH reconnects; reuse passwords only in memory and defer new sign-in prompts until an action needs the server. Keep the flight document and show a quiet connection dot.
+- Save/Open .bpflight results and automatic local history, including tracks, sensitivity members, profiles, selection and source metadata, without weather volumes or recalculation. Add per-launch downloads and an additional-launch action.
+- Read shared WRF/IFS/GFS libraries alongside private downloads. Support converted SkySight total fields, parent forecast cycles and Lambert wind rotation without COSALPHA/SINALPHA; allow an explicit earth-relative override.
+- Reset retained desktop connection choices before showing them; improve Android Local forecast-map size, land, grid and labels. Default weather colours to visible-window scaling.
+- Retry interrupted installer downloads into verified temporary folders. Default server port 8009; prepare/release workflows for all four app packages.
+
 ## v1.6.3
 
 - Keep the Windows connection screen loaded when reopening it; reset the choices in place and verify Return exactly once after its button is enabled.

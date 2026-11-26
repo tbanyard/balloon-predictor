@@ -1,6 +1,8 @@
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager
 import json
+import hashlib
+import re
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -41,11 +43,16 @@ class Jobs:
         self.settings, self.store = settings, store
         self.executor = executor or ThreadPoolExecutor(max_workers=settings.workers)
         self.records = {}
+        self.submissions = {}
         self.lock = threading.RLock()
 
-    def submit(self, kind, task):
+    def submit(self, kind, task, key=None):
         check_writable(self.settings.data_dir)
         with self.lock:
+            if key and key[0] in self.submissions:
+                fingerprint,job_id=self.submissions[key[0]]
+                if fingerprint!=key[1]:raise HTTPException(409, "This request identifier was already used for a different flight.")
+                return {"id":job_id,"status":self.get(job_id)["status"]}
             if sum(r["status"] in ("queued", "running") for r in self.records.values()) >= 16:
                 raise HTTPException(429, "Job queue is full. Wait for a running job to finish.")
             while len(self.records) >= 100:
@@ -56,6 +63,9 @@ class Jobs:
             lease = activity(self.settings)
             lease.__enter__()
             job_id = uuid.uuid4().hex
+            if key:
+                while len(self.submissions)>=1000:self.submissions.pop(next(iter(self.submissions)))
+                self.submissions[key[0]]=(key[1],job_id)
             self.records[job_id] = {"id": job_id, "kind": kind, "status": "queued", "message": "Queued"}
         def update(message):
             with self.lock:
@@ -182,6 +192,10 @@ def create_app(settings=None, executor=None):
             body["error_details"] = exc.details()
         return JSONResponse(status_code=422, content=body)
 
+    @app.get("/api/session-status")
+    def session_status():
+        return {"status": "connected", "mode": "server" if settings.workspace_user else "local", "username": settings.workspace_user}
+
     @app.get("/api/health")
     def health():
         return {"status": "ok", "version": __version__, "datasets": len(store.list()), "time_reference": "UTC"}
@@ -189,8 +203,8 @@ def create_app(settings=None, executor=None):
     @app.get("/api/weather")
     def weather_list():
         return {"datasets": store.list(), "defaults":{"dataset":settings.default_dataset, "era5_root":str(settings.era5_root),
-                    "wrf_root":str(settings.wrf_root),"cache_mb":settings.cache_mb, "data_dir":str(settings.data_dir), "terrain_dir":str(store.terrain.root)},
-                "messages":store.native.messages}
+                    "wrf_root":str(settings.wrf_root),"shared_weather_root":str(settings.common_weather_root) if settings.common_weather_root else None,"cache_mb":settings.cache_mb, "data_dir":str(settings.data_dir), "terrain_dir":str(store.terrain.root)},
+                "messages":store.native.messages+store.shared.messages}
 
     @app.get("/api/storage/health")
     def storage_health():
@@ -201,7 +215,8 @@ def create_app(settings=None, executor=None):
         def task(progress):
             progress("Indexing local ERA5 dates and WRF file headers…")
             store.native.scan()
-            return {"datasets":store.list(),"messages":store.native.messages}
+            store.shared.scan()
+            return {"datasets":store.list(),"messages":store.native.messages+store.shared.messages}
         return jobs.submit("weather",task)
 
     @app.get("/api/weather/{name}/times")
@@ -236,17 +251,39 @@ def create_app(settings=None, executor=None):
             raise PredictorError(str(exc)) from exc
         return {"altitude": store.get(name,stamp).terrain(latitude, (longitude + 180) % 360 - 180), "reference": "AMSL"}
 
+    @app.post("/api/flights/restore", status_code=201)
+    async def restore_flight(request: Request):
+        from .saved_flights import validate_result
+        length=int(request.headers.get("content-length",0))
+        if not 0<length<=32*1024**2:raise HTTPException(413,"Saved flights must be under 32 MB.")
+        raw=await request.body()
+        if len(raw)>32*1024**2:raise HTTPException(413,"Saved flights must be under 32 MB.")
+        try:value=json.loads(raw,parse_constant=lambda value: (_ for _ in ()).throw(ValueError()))["result"]
+        except (ValueError,KeyError,TypeError):raise PredictorError("Invalid saved flight file.")
+        validate_result(value)
+        ident=uuid.uuid4().hex
+        value["id"]=ident
+        atomic_json(settings.data_dir/"results"/(ident+".json"),value)
+        return {"id":ident,"status":"completed"}
+
+    def submission_key(request,body):
+        key=request.headers.get("x-bp-request-id")
+        if not key:return None
+        if not re.fullmatch(r"[A-Za-z0-9_-]{8,128}",key):raise HTTPException(422,"Invalid request identifier.")
+        fingerprint=hashlib.sha256((request.url.path+json.dumps(body.model_dump(mode="json"),sort_keys=True)).encode()).hexdigest()
+        return key,fingerprint
+
     @app.post("/api/predictions", status_code=202)
-    def prediction_job(body: PredictionRequest):
-        return jobs.submit("prediction", lambda progress: predict(body, store.get(body.dataset,body.launch_datetime), progress))
+    def prediction_job(body: PredictionRequest, request: Request):
+        return jobs.submit("prediction", lambda progress: predict(body, store.get(body.dataset,body.launch_datetime), progress), key=submission_key(request,body))
 
     @app.post("/api/predictions/series", status_code=202)
-    def prediction_series(body: BatchPredictionRequest):
-        return jobs.submit("prediction",lambda progress:predict_batch(body,store,progress))
+    def prediction_series(body: BatchPredictionRequest, request: Request):
+        return jobs.submit("prediction",lambda progress:predict_batch(body,store,progress), key=submission_key(request,body))
 
     @app.post("/api/predictions/arrival", status_code=202)
-    def prediction_arrival(body: ArrivalPlanRequest):
-        return jobs.submit("prediction", lambda progress: plan_arrivals(body, store, progress))
+    def prediction_arrival(body: ArrivalPlanRequest, request: Request):
+        return jobs.submit("prediction", lambda progress: plan_arrivals(body, store, progress), key=submission_key(request,body))
 
     @app.post("/predict")
     def synchronous_prediction(body: PredictionRequest):
@@ -486,7 +523,7 @@ def configured_app():
     settings = Settings.load()
     if settings.shared_server:
         from .multiuser import SharedServer
-        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8008")))
+        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8009")))
     return create_app(settings)
 
 

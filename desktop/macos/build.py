@@ -157,7 +157,7 @@ def build(output):
         for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
             shutil.copy2(REPO / name, source / name)
         (source / "desktop" / "macos").mkdir(parents=True)
-        for name in ("launcher.py", "smoke.py", "connection.py", "host.py"):
+        for name in ("launcher.py", "smoke.py", "connection.py", "host.py", "forward.py"):
             shutil.copy2(HERE.parent / name, source / "desktop" / name)
         shutil.copytree(HERE.parent / "connect-ui", source / "desktop/connect-ui")
         runtime_info = {arch: stage_runtime(arch, runtime / arch, work) for arch in RUNTIMES}

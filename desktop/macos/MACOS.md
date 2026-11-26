@@ -1,6 +1,6 @@
 # BalloonPredictor for macOS
 
-Use **BalloonPredictor-1.6.3-macOS-Universal.dmg** on an Apple silicon or
+Use **BalloonPredictor-1.6.4-macOS-Universal.dmg** on an Apple silicon or
 Intel Mac running **macOS 15 Sequoia or newer**. The same disk image works
 for both processor types. It includes Python and the forecast libraries.
 

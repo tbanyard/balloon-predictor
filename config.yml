@@ -15,6 +15,8 @@ max_export_mb: 4096
 # era5_root: /data3/ERA5  # Automatically detected if present.
 # Native wrfout files, including files around 10 GB, stay in this directory.
 # wrf_root: /path/to/wrf-runs
+# Common read-only weather is also found in <shared_data_root>/{wrf,ifs,gfs}.
+# wrf_wind_reference: grid  # Use earth only if the converter already rotated winds.
 # Budget for decoded column data. Horizontal geometry uses additional RAM.
 cache_mb: 256
 # Never interpolate through missing days or long gaps.

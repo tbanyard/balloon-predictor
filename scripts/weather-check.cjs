@@ -35,7 +35,7 @@ let logs='',browser;server.stderr.on('data',b=>logs+=b.toString());const delay=m
  assert.ok(await page.locator('#restore-weather').isDisabled());
  await page.selectOption('#weather-source','ifs');await page.selectOption('#dataset','ifs-snapshot');await fillDateTime(page,'launch_datetime','2024-01-15T12:00');await page.fill('#launch_latitude','53');await page.fill('#launch_longitude','-4');await page.fill('#launch_altitude','100');await page.fill('#burst_altitude','1500');await page.selectOption('#flight_mode','ascent');
  await page.locator('#schedule-details summary').click();await page.selectOption('#run_mode','series');await page.fill('#series_duration','2');await page.fill('#series_interval','1');await page.click('#predict-button');await page.waitForFunction(()=>!document.querySelector('#flight-result').hidden,{},{timeout:30000});
- assert.equal(await page.locator('#series-launches button').count(),2);
+ assert.equal(await page.locator('#series-launches .series-launch').count(),2);
  await page.click('#weather-overlay-open');await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.loadedFlight,{},{timeout:30000});
 
  assert.match(await page.textContent('#weather-overlay-meta'),/1,500 m AMSL/);assert.match(await page.textContent('#weather-overlay-meta'),/2024-01-15 12:00:00 UTC/);assert.equal(posts.length,1);
@@ -66,13 +66,13 @@ let logs='',browser;server.stderr.on('data',b=>logs+=b.toString());const delay=m
  await page.evaluate(()=>{map.setView([54.5,-2.5],10,{animate:false});});await delay(300);const northeast=await page.locator('#weather-range-min').inputValue()+','+await page.locator('#weather-range-max').inputValue();assert.notEqual(southwest,northeast,'Visible-window colour scale did not follow the map');assert.equal(posts.length,controlsPosts);
  await page.fill('#weather-range-min','-50');await page.locator('#weather-range-min').dispatchEvent('change');await page.fill('#weather-range-max','10');await page.locator('#weather-range-max').dispatchEvent('change');assert.equal(await page.inputValue('#weather-range-mode'),'fixed');
  await page.fill('#weather-range-max','-60');await page.locator('#weather-range-max').dispatchEvent('change');assert.match(await page.textContent('#weather-range-error'),/greater than/);await page.fill('#weather-range-max','10');await page.locator('#weather-range-max').dispatchEvent('change');
- await page.locator('#series-launches button').nth(1).click();await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.weatherTime==='2024-01-15T13:00:00Z');assert.equal(await page.inputValue('#weather-range-min'),'-50');assert.equal(await page.inputValue('#weather-range-max'),'10');assert.equal(await page.inputValue('#weather-range-mode'),'fixed');
+ await page.locator('#series-launches .series-launch').nth(1).click();await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.weatherTime==='2024-01-15T13:00:00Z');assert.equal(await page.inputValue('#weather-range-min'),'-50');assert.equal(await page.inputValue('#weather-range-max'),'10');assert.equal(await page.inputValue('#weather-range-mode'),'fixed');
  console.log('Weather stage: colour controls');
  // Preserve stale-response protection while allowing at most two active loads.
  let release;const gate=new Promise(r=>release=r);let delayed=false;
  await page.route('**/weather-overlay',async r=>{if(!delayed&&JSON.parse(r.request().postData()).time_basis==='target'){delayed=true;await gate;}await r.continue();});
  await page.selectOption('#weather-overlay-time','target');for(let i=0;i<60&&!delayed;i++)await delay(25);assert.ok(delayed);
- await page.locator('#series-launches button').first().click();await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.weatherTime?.startsWith('2024-01-15T12:04:40'));
+ await page.locator('#series-launches .series-launch').first().click();await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.weatherTime?.startsWith('2024-01-15T12:04:40'));
  const current=await page.locator('#weather-panel').getAttribute('data-weather-time');release();await delay(800);assert.equal(await page.locator('#weather-panel').getAttribute('data-weather-time'),current,'Stale weather replaced the selected flight');await page.unroute('**/weather-overlay');
  await page.selectOption('#weather-overlay-time','launch');await page.waitForFunction(()=>document.querySelector('#weather-panel').dataset.weatherTime==='2024-01-15T12:00:00Z');
  console.log('Weather stage: selection guards');

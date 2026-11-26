@@ -36,6 +36,8 @@ class App:
         self.info = None
         self.passed = self.downloading = False
         self.generation = 0
+        self.connection_probe_at=0
+        self.connection_probing=False
         self.flight_url = None
         self.roundtrip = 0
         self.probing = False
@@ -48,6 +50,9 @@ class App:
         bar = Gtk.HeaderBar(title="BalloonPredictor", show_close_button=True)
         button = Gtk.Button(label="Server")
         button.connect("clicked", self.show_chooser)
+        self.connection_dot=Gtk.Label(label="●")
+        self.connection_dot.set_tooltip_text("Connected")
+        bar.pack_end(self.connection_dot)
         bar.pack_end(button)
         self.window.set_titlebar(bar)
         data = root / "webview"
@@ -91,8 +96,20 @@ class App:
 
     def show_chooser(self, *_):
         if self.info:
-            self.chooser.load_uri(self.info["url"] + "?splash=done&native=1")
-            self.views.set_visible_child_name("chooser")
+            url=self.info["url"] + "?splash=done&native=1"
+            if self.chooser.get_uri()!=url:
+                self.chooser.load_uri(url)
+                self.views.set_visible_child_name("chooser")
+            else:
+                # Reset the retained chooser before revealing it, so the old
+                # selected connection fields never flash on screen.
+                script="window.BalloonConnection?.showChoices()"
+                if self.smoke and self.roundtrip==1:
+                    script+=";window.__bpReturnTest=true"
+                def reveal(*_):
+                    if self.smoke and self.roundtrip==1:self.roundtrip=2
+                    self.views.set_visible_child_name("chooser")
+                self.chooser.run_javascript(script,None,reveal,None)
 
     def present_flight(self):
         try:
@@ -196,6 +213,17 @@ class App:
             self.show_chooser()
         if self.info:
             self.present_flight()
+            if self.flight_url and time.monotonic()>self.connection_probe_at and not self.connection_probing:
+                self.connection_probe_at=time.monotonic()+2
+                self.connection_probing=True
+                def connection_state(view,result,_):
+                    self.connection_probing=False
+                    try:value=view.run_javascript_finish(result).get_js_value().to_string()
+                    except GLib.Error:return
+                    color,label={"connected":("#2a8266","Connected"),"signin_required":("#c24736","Sign-in required")}.get(value,("#df8a2c","Reconnecting…"))
+                    self.connection_dot.set_markup(f'<span foreground="{color}">●</span>')
+                    self.connection_dot.set_tooltip_text(label)
+                self.web.run_javascript("window.BalloonNetwork?.state||'connected'",None,connection_state,None)
         if self.info and self.smoke and not self.downloading:
             self.check_window()
         return True

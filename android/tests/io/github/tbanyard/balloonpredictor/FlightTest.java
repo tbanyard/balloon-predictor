@@ -28,14 +28,15 @@ public final class FlightTest extends Instrumentation {
             check(onMain(()->app.localChoice.getCompoundDrawables()[1].getBounds().height()==app.serverChoice.getCompoundDrawables()[1].getBounds().height()),"Connection icons are unequal");
             check(onMain(()->app.localChoice.getStateListAnimator()==null&&app.serverChoice.getStateListAnimator()==null),"Choice elevation animation causes inconsistent shadows");
             check(onMain(()->app.localChoice.getElevation()==app.serverChoice.getElevation()),"Choice shadows differ");
+            AtomicReference<String> pin=new AtomicReference<>();
             AtomicInteger trusted=new AtomicInteger(),authenticated=new AtomicInteger();
             runOnMainSync(()->{
                 app.serverChoice.performClick();
                 app.mode.setSelection(1);app.host.setText("10.0.2.2");app.username.setText("fixture");
                 app.sshPort.setText(args.getString("ssh_port"));app.webPort.setText(args.getString("web_port"));
                 app.connect(new ServerSession.Prompts(){
-                    public String pin(String e){return null;}
-                    public void savePin(String e,String p){}
+                    public String pin(String e){return pin.get();}
+                    public void savePin(String e,String p){pin.set(p);}
                     public boolean trust(String e,String p){trusted.incrementAndGet();return p.equals(args.getString("fingerprint"));}
                     public String[] credentials(String m,String[] p,boolean[] echo){
                         authenticated.incrementAndGet();return p.length==1&&!echo[0]?new String[]{"fixture-password"}:null;
@@ -60,6 +61,20 @@ public final class FlightTest extends Instrumentation {
             waitFor(()->("\""+expected+"\"").equals(js(original,"window.__workspaceUser||''")),"verified personal workspace");
             js(original,"(()=>{document.querySelector('#flight_name').value='Keep this flight';document.querySelector('#flight_mode').value='ascent';document.querySelector('#burst_altitude').value='1000';document.querySelector('#ascent_rate').value='5';document.querySelector('#predict-button').click()})()");
             waitFor(()->"true".equals(js(original,"document.querySelector('#flight-status').textContent.startsWith('Flight complete')")),"flight");
+            js(original,"window.__bpRecoveryMarker='same document'");
+            java.lang.reflect.Field sessionField=MainActivity.class.getDeclaredField("session");sessionField.setAccessible(true);
+            ServerSession outer=(ServerSession)sessionField.get(app);RecoveryGateway gateway=outer.gateway;
+            String origin=outer.origin;int originalPrompts=authenticated.get();ServerSession dropped=gateway.transport;dropped.close();
+            waitFor(()->gateway.transport!=null&&gateway.transport!=dropped&&"connected".equals(gateway.state),"automatic SSH recovery");
+            check(authenticated.get()==originalPrompts,"Background recovery prompted for a reusable password");
+            check(outer.origin.equals(origin)&&onMain(()->app.web==original),"Reconnection replaced the origin or WebView");
+            gateway.password=null;gateway.transport.close();
+            waitFor(()->"signin_required".equals(gateway.state),"deferred SSH authentication");
+            check(authenticated.get()==originalPrompts,"Idle reconnection asked for credentials");
+            js(original,"BalloonNetwork.recover(true).then(()=>window.__bpRecovered=true)");
+            waitFor(()->"true".equals(js(original,"window.__bpRecovered===true")),"user-requested SSH sign-in");
+            check(authenticated.get()>originalPrompts,"Explicit recovery did not request credentials");
+            check("true".equals(js(original,"window.__bpRecoveryMarker==='same document'&&document.querySelector('#flight-result').hidden===false")),"Recovery lost calculated flight");
             runOnMainSync(()->app.serverButton.performClick());
             check(onMain(()->app.form.getVisibility()==View.VISIBLE&&app.returnButton.getVisibility()==View.VISIBLE),"Missing Return to flight");
             runOnMainSync(()->app.returnButton.performClick());
@@ -79,10 +94,11 @@ public final class FlightTest extends Instrumentation {
                 +"const transfer=new DataTransfer();transfer.items.add(new File([raw],'fixture.bpforecast'));"
                 +"const input=document.querySelector('#forecast');input.files=transfer.files;input.dispatchEvent(new Event('change'));})()");
             waitFor(()->"true".equals(js(offline,"document.querySelector('#flight').hidden===false")),"decoded offline forecast");
+            check("true".equals(js(offline,"document.querySelector('#offline-map-panel').hidden===false&&document.querySelector('#map').getBoundingClientRect().height>=300")),"Offline forecast map is missing or too small");
             js(offline,"document.querySelector('#calculate').click()");
             waitFor(()->"true".equals(js(offline,"document.querySelector('#result').hidden===false")),"locally calculated flight");
             check("true".equals(js(offline,"document.querySelector('#status').textContent.includes('on this phone')")),"Offline solver was not used");
-            result.putString("stream","\nBP_ANDROID_PASS: personal SSH workspace, rescan, one header, Local/Server choices, both return paths, and an offline forecast flight.\n");
+            result.putString("stream","\nBP_ANDROID_PASS: personal SSH workspace, automatic/deferred SSH recovery with stable origin and retained flight, rescan, one header, Local/Server choices, both return paths, and an offline forecast flight.\n");
             runOnMainSync(app::finish);finish(Activity.RESULT_OK,result);
         }catch(Throwable error){
             result.putString("stream","\nBP_ANDROID_FAIL: "+android.util.Log.getStackTraceString(error));

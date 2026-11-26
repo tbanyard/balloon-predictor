@@ -29,6 +29,9 @@ final class ServerSession implements AutoCloseable {
     final boolean offline;
     final String signin;
     private final Session ssh;
+    RecoveryGateway gateway;
+    boolean connected(){return ssh!=null&&ssh.isConnected();}
+    String renewIdentity() throws Exception {JSONObject info=healthInfo(origin);if(info==null)throw new IllegalArgumentException("Server unavailable");return identityToken(ssh,info);}
 
     private ServerSession(String origin, Session ssh) { this(origin,ssh,null); }
     private ServerSession(String origin, Session ssh,String signin) { this.origin=origin; this.ssh=ssh; this.signin=signin;this.offline=OFFLINE_ORIGIN.equals(origin); }
@@ -51,7 +54,15 @@ final class ServerSession implements AutoCloseable {
         return new ServerSession(origin,null);
     }
 
-    static ServerSession ssh(String host,int sshPort,String user,int webPort,int localPort,Prompts ui) throws Exception {
+    static ServerSession ssh(String host,int sshPort,String user,int webPort,int localPort,Prompts ui,java.io.File directory) throws Exception {
+        RecoveryGateway gateway=new RecoveryGateway(host,sshPort,user,webPort,localPort,ui,directory);
+        try{
+            ServerSession transport=transport(host,sshPort,user,webPort,0,gateway.prompts);
+            gateway.attach(transport);
+            ServerSession result=new ServerSession(gateway.origin,null,transport.signin);result.gateway=gateway;return result;
+        }catch(Exception error){gateway.close();throw error;}
+    }
+    static ServerSession transport(String host,int sshPort,String user,int webPort,int localPort,Prompts ui) throws Exception {
         if (!host.matches("[a-zA-Z0-9._:-]+")||user.isEmpty()||user.length()>128||sshPort<1||sshPort>65535||webPort<1||webPort>65535)
             throw new IllegalArgumentException("Enter the SSH host, username and valid port numbers.");
         String endpoint=host+":"+sshPort;
@@ -84,6 +95,18 @@ final class ServerSession implements AutoCloseable {
             if(health==null)throw new IllegalArgumentException("SSH signed in, but BalloonPredictor did not answer at server port "+webPort+".");
             String signin=null;
             if(health.optBoolean("requires_ssh_identity")){
+                String token=identityToken(session,health);
+                signin=token==null?null:"/signin#"+token;
+            }
+            return new ServerSession(origin,session,signin);
+        } catch (Exception error) {
+            session.disconnect();
+            throw error;
+        }
+    }
+
+    private static String identityToken(Session session,JSONObject health) throws Exception {
+        if(!health.optBoolean("requires_ssh_identity"))return null;
                 String path=health.optString("identity_socket");
                 if(!path.startsWith("/")||path.getBytes(StandardCharsets.UTF_8).length>103||path.indexOf(0)>=0)
                     throw new IllegalArgumentException("The server returned an invalid workspace sign-in address.");
@@ -105,14 +128,8 @@ final class ServerSession implements AutoCloseable {
                     if(!command.isClosed()||command.getExitStatus()!=0)throw new IllegalArgumentException("The server could not open a personal workspace. Ask its operator to check the sign-in service.");
                     String token=new JSONObject(bytes.toString("UTF-8")).optString("token");
                     if(!token.matches("[A-Za-z0-9_-]{43}"))throw new IllegalArgumentException("Could not sign into your personal workspace. Check the server folder permissions.");
-                    signin="/signin#"+token;
+                    return token;
                 }finally{command.disconnect();}
-            }
-            return new ServerSession(origin,session,signin);
-        } catch (Exception error) {
-            session.disconnect();
-            throw error;
-        }
     }
 
     static boolean healthy(String origin) {
@@ -134,7 +151,7 @@ final class ServerSession implements AutoCloseable {
         } catch(Exception ignored){return null;}
         finally {if(connection!=null)connection.disconnect();}
     }
-    @Override public void close(){if(ssh!=null)ssh.disconnect();}
+    @Override public void close(){if(gateway!=null)gateway.close();if(ssh!=null)ssh.disconnect();}
 
     private static final class KeyPin implements HostKeyRepository {
         final String endpoint;final Prompts ui;boolean changed;

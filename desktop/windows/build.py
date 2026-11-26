@@ -103,7 +103,7 @@ def stage(payload, work, source_commit):
     for name in ("LICENSE", "THIRD_PARTY_NOTICES.md"):
         shutil.copy2(REPO / name, app / name)
     (app / "desktop/windows").mkdir(parents=True)
-    for name in ("launcher.py", "smoke.py", "connection.py", "host.py"):
+    for name in ("launcher.py", "smoke.py", "connection.py", "host.py", "forward.py"):
         shutil.copy2(HERE.parent / name, app / "desktop" / name)
     shutil.copytree(HERE.parent / "connect-ui", app / "desktop/connect-ui")
     shutil.copy2(HERE / "BalloonPredictor.ico", app / "desktop/windows/BalloonPredictor.ico")

@@ -2,9 +2,10 @@
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; worker-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'">
 <title>Offline flight · BalloonPredictor</title><link rel="stylesheet" href="/assets/vendor/leaflet/leaflet.css"><link rel="stylesheet" href="/offline/screen.css">
-<script src="/assets/vendor/leaflet/leaflet.js" defer></script><script src="/assets/coastlines.js" defer></script><link rel="stylesheet" href="/assets/datetime.css"><script src="/assets/datetime.js" defer></script><script src="/offline/screen.js" defer></script></head>
+<script src="/assets/vendor/leaflet/leaflet.js" defer></script><script src="/assets/coastlines.js" defer></script><link rel="stylesheet" href="/assets/datetime.css"><script src="/assets/datetime.js" defer></script><script src="/assets/offline-map.js" defer></script><script src="/assets/flights.js" defer></script><script src="/offline/screen.js" defer></script></head>
 <body><main>
 <header><span>ON THIS PHONE</span><h1>Offline flight</h1><p>Recalculate one trajectory using a saved regional forecast. No connection is needed once the pack is on this phone.</p></header>
+<section><label class="choose">Open saved flights <input id="open-saved-flight" type="file" accept=".bpflight,application/json"></label><p>View calculated tracks without a forecast or connection.</p><button id="open-recent-flight" type="button">Open last saved flights</button><label id="saved-launch-label" hidden>Saved launch<select id="saved-launch"></select></label></section>
 <section><label class="choose">Open saved forecast <input id="forecast" type="file" accept=".bpforecast,application/octet-stream"></label>
 <p id="forecast-info" role="status">While connected, calculate a flight with downloaded IFS, GFS, or pressure-level ERA5 weather. In Flight Details choose <strong>Save offline forecast for Android</strong>, then open that file here.</p></section>
 <form id="flight" hidden>
@@ -25,8 +26,9 @@
 </div>
 <p id="ground-note"></p><button id="calculate" type="submit">Calculate on this phone</button>
 </form>
+<section id="offline-map-panel" hidden><h2>Flight map</h2><p class="offline-map-note">Saved forecast coverage · offline coastline map</p><div id="map" aria-label="Offline flight map"></div></section>
 <p id="status" role="status" aria-live="polite"></p>
-<section id="result" hidden><h2>Predicted flight</h2><p id="endpoint"></p><div id="map" aria-label="Offline flight map"></div>
-<div class="exports"><button id="save-csv" type="button">Save CSV ↓</button><button id="save-geojson" type="button">Save GeoJSON ↓</button></div></section>
+<section id="result" hidden><h2>Predicted flight</h2><p id="endpoint"></p>
+<div class="exports"><button id="save-flight" type="button">Save flight ↓</button><button id="save-csv" type="button">Save CSV ↓</button><button id="save-geojson" type="button">Save GeoJSON ↓</button></div></section>
 <p class="limit">Offline mode includes the saved weather and coastline map. Fresh downloads, physical DEM, sensitivity, flight series and NetCDF exports use the server.</p>
 </main></body></html>

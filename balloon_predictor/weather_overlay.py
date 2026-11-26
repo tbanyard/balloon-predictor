@@ -35,7 +35,9 @@ def _runs(indices, limit):
 
 
 def prepare_native(base, when, latitudes, longitudes, progress):
-    if not isinstance(base, (ERA5Weather, WRFWeather)):
+    from .weather.shared import SharedWeather
+    from .modelbox import normalized_block
+    if not isinstance(base, (ERA5Weather, WRFWeather, SharedWeather)):
         return base
     with NETCDF_LOCK:
         # A private records list prevents other archive users changing time
@@ -60,7 +62,7 @@ def prepare_native(base, when, latitudes, longitudes, progress):
             raise CoverageError("This map area is outside the selected flight's weather grid. Move the map inside the model coverage.")
         ys, xs = {p[0] for p in corners}, {p[1] for p in corners}
         columns = {}
-        if isinstance(model, ERA5Weather):
+        if isinstance(model, (ERA5Weather, SharedWeather)):
             # netCDF4 orthogonal indexing can batch disjoint ERA5 nodes; WRF
             # needs contiguous groups because its velocities are staggered.
             ylist, xlist = np.array(sorted(ys)), np.array(sorted(xs))
@@ -75,7 +77,7 @@ def prepare_native(base, when, latitudes, longitudes, progress):
                 if not any((int(y), int(x)) in corners for y in yb for x in xb):
                     continue
                 progress(f"Reading weather columns · time {sorted(times).index(ti)+1}/{len(times)} · block {n+1}/{len(blocks)}")
-                fields, surface = (era_block if isinstance(model, ERA5Weather) else wrf_block)(model, ti, yb, xb)
+                fields, surface = (era_block if isinstance(model, ERA5Weather) else normalized_block if isinstance(model, SharedWeather) else wrf_block)(model, ti, yb, xb)
                 for iy, y in enumerate(yb):
                     for ix, x in enumerate(xb):
                         if (int(y), int(x)) not in corners:

@@ -152,7 +152,7 @@
     function setFlight(value){const old=selected&&selected.jobId+":"+selected.flightIndex,current=value&&value.jobId+":"+value.flightIndex;selected=value;flightCaption();if(old!==current){area=null;clearTimeout(mapTimer);queue();if(!value)message("Calculate a flight to show its weather.");}}
     function enable(){enabled=true;if(!selected){message("Calculate a flight to show its weather.");return;}load();}
     let previousField=field.value;
-    field.onchange=()=>{rangeSettings.set(previousField,{mode:rangeMode.value,low:rangeMin.value,high:rangeMax.value});const saved=rangeSettings.get(field.value);rangeMode.value=saved?.mode||"auto";if(saved){rangeMin.value=saved.low;rangeMax.value=saved.high;}previousField=field.value;render();};
+    field.onchange=()=>{rangeSettings.set(previousField,{mode:rangeMode.value,low:rangeMin.value,high:rangeMax.value});const saved=rangeSettings.get(field.value);rangeMode.value=saved?.mode||"view";if(saved){rangeMin.value=saved.low;rangeMax.value=saved.high;}previousField=field.value;render();};
     opacity.oninput=()=>{$("weather-opacity-value").textContent=opacity.value+"%";image?.setOpacity(Number(opacity.value)/100);};
     show.onchange=()=>{if(show.checked)load();else{++token;clearTimeout(mapTimer);message("Weather hidden.");}syncVisibility();};wind.onchange=syncVisibility;time.onchange=()=>queue();
     levelMode.onchange=()=>{if(levelMode.value==="pressure")levelValue.value="500";else if(selected)levelValue.value=number(selected.flight.summary.burst.altitude);levelControls();queue();};levelValue.onchange=()=>queue();
