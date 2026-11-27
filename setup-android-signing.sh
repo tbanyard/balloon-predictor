@@ -48,4 +48,4 @@ fi
 tr -d '\r\n' < "$password" | gh secret set BP_ANDROID_STORE_PASSWORD --repo "$repo"
 tr -d '\r\n' < "$password" | gh secret set BP_ANDROID_KEY_PASSWORD --repo "$repo"
 base64 < "$key" | tr -d '\n' | gh secret set BP_ANDROID_KEYSTORE --repo "$repo"
-printf 'Saved the stable Android signing key in GitHub secrets.\nKeep a private backup of %s and its password.\nRun prepare-v1.6.4.sh next.\n' "$key"
+printf 'Saved the stable Android signing key in GitHub secrets.\nKeep a private backup of %s and its password.\nRun prepare-v1.6.6.sh next.\n' "$key"

@@ -261,7 +261,7 @@ static NSString *const nativeArch = @"x86_64";
     }
     self.origin = origin;
     WKWebViewConfiguration *config = [WKWebViewConfiguration new];
-    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.4";
+    NSString *version = [[NSBundle mainBundle] objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"1.6.6";
     config.applicationNameForUserAgent = [NSString stringWithFormat:@"BalloonPredictor/%@ (+https://github.com/tbanyard/balloon-predictor)", version];
     if (self.testRoot) config.websiteDataStore = WKWebsiteDataStore.nonPersistentDataStore;
     self.web = [[WKWebView alloc] initWithFrame:self.window.contentView.bounds configuration:config];

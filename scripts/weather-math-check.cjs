@@ -14,3 +14,6 @@ const fake={getBounds:()=>({getNorth:()=>60,getSouth:()=>50,getWest:()=>170,getE
 const world={getBounds:()=>({getNorth:()=>90,getSouth:()=>-90,getWest:()=>-400,getEast:()=>400}),getCenter:()=>({lng:0})};const all=w.bufferedBounds(world);assert.equal(all[0],85);assert.equal(all[2],-85);assert.ok(all[3]-all[1]<=360+1e-8&&w.containsView(all,world));
 assert.equal(w.regional({area:[55,-6,51,-2]}),true);assert.equal(w.regional({area:[85,-180,-85,180]}),false);
 console.log('Weather geometry: PASS · geographic/date-line interpolation, missing-cell masks, exact boundary samples, Mercator coordinates, physical wind direction/distance and colour scale.');
+
+assert.equal(w.animationFactor(10),1);assert.equal(w.animationFactor(9),1);assert(w.animationFactor(7)>2&&w.animationFactor(7)<4);assert.equal(w.animationFactor(0),8);for(let z=1;z<9;z++)assert(w.animationFactor(z)>=w.animationFactor(z+1));
+console.log('Wind animation zoom boost: bounded, smooth and stronger at wide zoom.');

@@ -40,7 +40,25 @@ async function api(path,options){
   if(!response.ok){const d=data.detail;throw Object.assign(new Error(Array.isArray(d)?d.map(e=>e.loc.slice(1).join(".")+": "+e.msg).join("; "):d||"Request failed."),{details:data.error_details,httpStatus:response.status});}
   return data;
 }
-async function poll(id,update){for(;;){const job=await api("/api/jobs/"+id);update(job.message,job.status);if(job.status==="failed")throw Object.assign(new Error(job.error),{details:job.error_details});if(job.status==="completed")return job.result;await new Promise(resolve=>setTimeout(resolve,500));}}
+async function poll(id,update,signal){for(;;){if(signal?.aborted)throw new DOMException('Calculation cancelled','AbortError');const job=await api("/api/jobs/"+id,{signal});if(signal?.aborted)throw new DOMException('Calculation cancelled','AbortError');update(job.message,job.status);if(job.status==="failed")throw Object.assign(new Error(job.error),{details:job.error_details});if(job.status==="cancelled")throw new DOMException('Calculation cancelled','AbortError');if(job.status==="completed")return job.result;await new Promise(resolve=>setTimeout(resolve,500));}}
+let calculation=null;
+function calculationControls(){
+  for(const id of ['cancel-calculation','mobile-cancel-calculation','cancel-additional-calculation'])$(id).hidden=!running;
+  $('calculate-additional-launch').disabled=running||!datasets.some(d=>d.id===$('additional-dataset').value&&d.available!==false);$('add-launch-open').disabled=running;
+  $('dismiss-flight-status').hidden=running;$('predict-button').disabled=running||$('dataset').value.startsWith('online-');
+  window.BalloonUI?.predictionBusy(running);
+}
+function beginCalculation(){const op={controller:new AbortController(),job:null,last:'Preparing calculation…'};calculation=op;running=true;calculationControls();return op;}
+function finishCalculation(op){if(calculation!==op)return;calculation=null;running=false;calculationControls();}
+function cancelCalculation(){
+  const op=calculation;if(!op)return;op.controller.abort();finishCalculation(op);
+  const text='Calculation cancelled on this device. Saved flights can now be opened.';status('flight-status',text);$('additional-launch-status').textContent=text;
+  // Do not wait for a dropped tunnel or trigger a new sign-in to cancel.
+  if(op.job){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),4000);fetch('/api/jobs/'+op.job+'/cancel',{method:'POST',signal:controller.signal}).then(r=>{if(!r.ok)throw Error();}).catch(()=>{if(!running){const note=' Local calculation cancelled. The server could not confirm cancellation; it may finish its current work.';$('flight-status').textContent+=note;$('additional-launch-status').textContent+=note;}}).finally(()=>clearTimeout(timer));}
+}
+for(const id of ['cancel-calculation','mobile-cancel-calculation','cancel-additional-calculation'])$(id).onclick=cancelCalculation;
+document.addEventListener('bp:connection',event=>{if(calculation&&event.detail.status!=='connected'){const text=event.detail.label+' · '+calculation.last+' · Cancel to open saved flights.';status('flight-status',text,'working');$('additional-launch-status').textContent=text;}});
+
 const weatherOverlay=BalloonWeather.create(map,api,{showMap:()=>window.BalloonWindows?.show("map-panel")});
 function activeSite(){return sites.find(s=>s.id===activeId);}
 function readSetup(){return Object.fromEntries(setupFields.map(key=>[key,$(key).type==="checkbox"?$(key).checked:$(key).value]));}
@@ -166,7 +184,7 @@ async function loadDatasets(selectId){
   weatherSelectors(weatherItems().some(d=>d.id===selected)?selected:defaultId);datasetChanged(false);
 }
 let timesToken=0;
-function datasetChanged(adjustDate){
+function datasetChanged(adjustDate,localOnly=false){
   ++timesToken;
   const selectedWeather=weatherItems().find(d=>d.id===$("dataset").value);if(selectedWeather)$("dataset").title=runLabel(selectedWeather);
   const online=$("dataset").value.startsWith("online-");$("ground-button").disabled=online;
@@ -183,9 +201,9 @@ function datasetChanged(adjustDate){
   const blank=new Option("No archive match","");blank.disabled=true;
   $("available-day").replaceChildren(blank,...(info.dates||[]).map(date=>new Option(date,date)));
   launchMarker.setLatLng([Number($("launch_latitude").value),Number($("launch_longitude").value)]);
-  syncArchiveDate();
+  syncArchiveDate(localOnly);selectedWeatherMap(selectedResult());
 }
-async function syncArchiveDate(){
+async function syncArchiveDate(localOnly=false){
   const token=++timesToken,day=$("launch_datetime").value.slice(0,10),dataset=$("dataset").value;
   const dates=datasets.find(d=>d.id===dataset)?.dates;
   $("available-day").value=dates?.includes(day)?day:"";
@@ -194,6 +212,7 @@ async function syncArchiveDate(){
     $("available-times").textContent=day?"No archive records on "+day+". Pick an archive date to change the launch day.":"Enter a launch time or pick an archive date.";
     return;
   }
+  if(localOnly===true){$("available-times").textContent="Saved flight opened. Weather records are checked when you change the date or dataset.";return;}
   $("available-times").textContent="Checking records…";
   try{
     const {times}=await api("/api/weather/"+encodeURIComponent(dataset)+"/times?date="+day);
@@ -261,7 +280,7 @@ $("flight-form").onsubmit=async e=>{
   const mode=$("run_mode").value,isSeries=mode!=="single",isArrival=mode==="arrival";
   const all=isArrival?$("arrival_sites").value==="all":isSeries&&$("series_sites").value==="all";
   const chosen=all?[...sites]:[activeSite()],revisions=chosen.map(site=>site.revision);
-  running=true;window.BalloonUI?.predictionBusy(true);$("predict-button").disabled=true;document.dispatchEvent(new CustomEvent("bp:predictionstarted"));
+  const op=beginCalculation();document.dispatchEvent(new CustomEvent("bp:predictionstarted"));
   try{
     if(chosen.some(site=>site.setup.dataset.startsWith("online-")))throw new Error("Download the selected online forecast in Manage weather first.");
     let body,path;
@@ -269,8 +288,8 @@ $("flight-form").onsubmit=async e=>{
     else if(isSeries){body={flights:chosen.map(site=>requestFromSetup(site.setup)),duration_hours:Number($("series_duration").value),interval_hours:Number($("series_interval").value)};path="/api/predictions/series";}
     else{body=flightRequest();path="/api/predictions";}
     status("flight-status",isArrival?"Solving launch times and predicted arrival positions…":"Preparing weather and calculating…","working");
-    const job=await api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});
-    const completed=await poll(job.id,message=>status("flight-status",message,"working"));let accepted=0;
+    const job=await api(path,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(body),signal:op.controller.signal});op.job=job.id;
+    const completed=await poll(job.id,message=>{op.last=message;status("flight-status",message,"working");},op.controller.signal);if(calculation!==op)return;let accepted=0;
     chosen.forEach((site,i)=>{if(!sites.includes(site)||site.revision!==revisions[i])return;site.jobId=job.id;if(isSeries){site.series=completed;site.batchSiteIndex=i;site.selectedIndex=completed.flights.find(x=>x.site_index===i&&x.status==="completed")?.index??-1;site.result=null;}else{site.result=completed;site.series=null;}accepted++;});
     if(isArrival)$("endpoint-focus").set("burst",true);
     drawSelected();drawAllMap();fitFlight();persist();if(accepted&&window.BalloonFlights)BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);
@@ -282,9 +301,10 @@ $("flight-form").onsubmit=async e=>{
       setDemRecovery(failure.error_details);
     }
   }catch(error){
-    status("flight-status",error.message,"error");
+    if(calculation!==op)return;
+    status("flight-status",error.name==='AbortError'?'Calculation cancelled.':error.message,error.name==='AbortError'?'':"error");
     if(chosen.includes(activeSite())&&chosen.every((site,i)=>site.revision===revisions[i]))setDemRecovery(error.details);
-  }finally{running=false;$("dismiss-flight-status").hidden=false;window.BalloonUI?.predictionBusy(false);$("predict-button").disabled=$("dataset").value.startsWith("online-");}
+  }finally{finishCalculation(op);}
 };
 function unwrapped(points){let previous=null;return points.map(p=>{let lon=p.longitude;if(previous!==null)lon=previous+((lon-previous+540)%360-180);previous=lon;return[p.latitude,lon];});}
 function allFlights(){return sites.flatMap((site,si)=>site.series?siteEntries(site).filter(e=>e.status==="completed").map(e=>({site,si,index:e.index,result:e.result})):site.result?[{site,si,index:0,result:site.result}]:[]);}
@@ -348,13 +368,20 @@ function drawAllMap(){
 $("sensitivity-display").onchange=drawAllMap;
 function fitFlight(){const points=allFlights().flatMap(e=>e.result.prediction.filter(s=>preferredTrack!=="ascent"||s.stage==="ascent").flatMap(s=>s.trajectory));if(points.length)map.fitBounds(L.latLngBounds(unwrapped(points)),{padding:[45,45],maxZoom:11});else map.setView(launchMarker.getLatLng(),8);}
 $("fit-button").onclick=fitFlight;$("track-display").onchange=()=>{preferredTrack=$("track-display").value;drawAllMap();};$("endpoint-focus").onchange=()=>{preferredEndpoint=$("endpoint-focus").value;drawSelected();drawAllMap();};
+function launchModel(entry,site){const id=entry.result?.request.dataset||entry.dataset||site.setup.dataset;const info=entry.result?.weather||datasets.find(d=>d.id===id);return String(info?.source||(id.startsWith('wrf')?'wrf':id)).toUpperCase();}
 function drawSeries(site){
   $("series-launches").replaceChildren();$("series-summary").hidden=!site?.series;$("series-launches").hidden=!site;
   if(!site)return;
-  if(!site.series){if(site.result){const select=document.createElement('button');select.className='series-launch selected';select.textContent=utcText(site.result.request.launch_datetime);select.onclick=()=>{drawSelected();drawAllMap();};$("series-launches").append(select);appendLaunchDownload(site,0);}appendAdditionalLaunch();return;}
-  const entries=siteEntries(site);$("series-summary").textContent=entries.filter(e=>e.status==="completed").length+" / "+entries.length+" launches available · select a launch below to inspect its profile.";
-  for(const entry of entries){const button=document.createElement("button");button.type="button";button.className="series-launch "+(entry.status==="failed"?"failed":"")+(site.selectedIndex===entry.index?" selected":"");button.textContent=(entry.ascent_rate?entry.ascent_rate+" m/s · ":"")+entry.launch_datetime.slice(5,16).replace("T"," ")+" UTC"+(entry.status==="failed"?" · unavailable":"");button.disabled=entry.status==="failed";button.title=entry.error||"Inspect this launch";button.onclick=()=>{site.selectedIndex=entry.index;drawSelected();drawAllMap();persist();};$("series-launches").append(button);if(entry.status==="completed")appendLaunchDownload(site,entry.index);if(entry.status==="failed"){const note=document.createElement("span");note.className="launch-error";note.textContent=entry.error;$("series-launches").append(note);}}appendAdditionalLaunch();
+  const entries=site.series?siteEntries(site):site.result?[{index:0,status:'completed',launch_datetime:site.result.request.launch_datetime,result:site.result}]:[];
+  if(site.series)$("series-summary").textContent=entries.filter(e=>e.status==='completed').length+' / '+entries.length+' launches available · select a launch below to inspect its profile.';
+  for(const entry of entries){
+    const group=document.createElement('span');group.className='launch-result-actions';const button=document.createElement('button');button.type='button';button.className='series-launch '+(entry.status==='failed'?'failed':'')+((site.series?site.selectedIndex===entry.index:true)?' selected':'');button.textContent=(entry.ascent_rate?entry.ascent_rate+' m/s · ':'')+entry.launch_datetime.slice(0,16).replace('T',' ')+' UTC · '+launchModel(entry,site)+(entry.status==='failed'?' · unavailable':'');button.disabled=entry.status==='failed';button.title=entry.error||'Inspect this launch';button.onclick=()=>{site.selectedIndex=entry.index;drawSelected();drawAllMap();persist();};group.append(button);
+    if(entry.status==='completed'){button.title=entry.result.weather.label+' · '+entry.result.request.dataset;appendLaunchDownload(site,entry.index,group);}appendLaunchDelete(site,entry.index,group);$('series-launches').append(group);
+    if(entry.status==='failed'){const note=document.createElement('span');note.className='launch-error';note.textContent=entry.error;$('series-launches').append(note);}
+  }
+  appendAdditionalLaunch();
 }
+
 function updateSondeLink(){
   const site=activeSite(),available=Boolean(selectedResult(site)&&site?.jobId);
   $("netcdf-exports").hidden=!available;
@@ -381,8 +408,12 @@ function drawArrivals(site){
   }
   table.append(body);wrap.append(table);const timetable=document.createElement("a");timetable.className="text-button";timetable.textContent="Download launch timetable CSV ↓";timetable.href="/api/predictions/"+site.jobId+"/export/schedule";timetable.setAttribute("download","");area.append(title,note,timetable,wrap);
 }
+function selectedWeatherMap(data){
+  const info=data?.weather||datasets.find(d=>d.id===activeSite()?.setup.dataset);if(!info)return;const dataset=data?.request.dataset||activeSite()?.setup.dataset;$('model-badge').textContent=info.source==='demo'?'DEMO WEATHER':String(info.source).toUpperCase()+' · '+(info.native?'LOCAL FILES':dataset);$('model-badge').title=info.label;$('demo-notice').hidden=info.source!=='demo';coverageLayer.clearLayers();
+  if(info.area){const[n,w,s,e]=info.area;L.rectangle([[s,w],[n,e]],{color:'#688371',weight:1,dashArray:'5,6',fill:false,interactive:false}).addTo(coverageLayer);}
+}
 function drawSelected(){
-  const site=activeSite();result=selectedResult(site);jobId=site?.jobId;drawSeries(site);drawArrivals(site);renderTabs();
+  const site=activeSite();result=selectedResult(site);jobId=site?.jobId;selectedWeatherMap(result);drawSeries(site);drawArrivals(site);renderTabs();
   if(hoverMarker){map.removeLayer(hoverMarker);hoverMarker=null;}
   const offline=$("offline-pack"),packKey=jobId?jobId+":"+(site.series?site.selectedIndex:0):"";
   const packAvailable=result&&["era5","era5t","gfs","ifs"].includes(result.weather.source)&&result.weather.native!==true;
@@ -529,14 +560,14 @@ async function refreshSounding(){
   $("sounding-popout").href="/assets/sounding.html?job="+site.jobId+"&"+query;$("sounding-csv").href=base+"/export/csv?"+query;
   try{const profile=mode==="ascent"?data.sounding:await api(base+"?"+query);if(token!==soundingToken||$("sounding-panel").hidden)return;window.BalloonPlots.render(profile,$("skewt-chart"),$("uv-chart"));soundingRendered=key;$("sounding-panel").dataset.flight=key;$("sounding-note").textContent=profile.description+(profile.humidity_available?" Dew point from model humidity.":" Humidity is absent: temperature and winds only.");}catch(e){if(token===soundingToken)$("sounding-note").textContent=e.message;}finally{if(token===soundingToken)soundingPending=null;}
 }
-$("weather-overlay-open").onclick=()=>{window.BalloonWindows?.show("weather-panel");weatherOverlay.enable();};
+$("weather-overlay-open").onclick=()=>{$("weather-overlay-show").checked=true;window.BalloonWindows?.show("weather-panel");weatherOverlay.enable();};
 document.addEventListener("bp:panelshown",event=>{if(event.detail.id==="weather-panel")weatherOverlay.enable();});
 $("sounding-open").onclick=()=>{if(window.BalloonWindows)window.BalloonWindows.show("sounding-panel");else $("sounding-panel").hidden=false;scheduleSounding();};
   document.addEventListener("bp:panelshown",event=>{if(event.detail.id==="sounding-panel")scheduleSounding();});
   document.addEventListener("bp:layout",()=>{scheduleSounding();requestAnimationFrame(()=>{if(!$("map-panel").hidden)map.invalidateSize({pan:true,animate:false,debounceMoveend:true});});});
 $("sounding-close").onclick=()=>{soundingToken++;soundingPending=null;if(window.BalloonWindows)window.BalloonWindows.minimise("sounding-panel");else $("sounding-panel").hidden=true;};$("sounding-mode").onchange=refreshSounding;
 function downloadJSON(name,value){window.__bpExportFilename=name;const url=URL.createObjectURL(new Blob([JSON.stringify(value,null,2)],{type:"application/json"}));const link=document.createElement("a");link.href=url;link.download=name;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),10000);}
-$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.6.4",sites:sites.map(s=>({setup:s.setup}))});};
+$("export-session").onclick=()=>{saveCurrent();downloadJSON("balloon-predictor-launch-setups.json",{application:"BalloonPredictor",version:"1.6.6",sites:sites.map(s=>({setup:s.setup}))});};
 $("import-session").onchange=async()=>{
   try{const file=$("import-session").files[0];if(!file)return;if(file.size>1000000)throw new Error("Setup file must be under 1 MB.");const value=JSON.parse(await file.text());if(!Array.isArray(value.sites)||!value.sites.length||value.sites.length>20)throw new Error("Setup file must contain 1–20 launch points.");const defaults=readSetup();const added=value.sites.map(item=>{if(!item.setup||typeof item.setup!=="object")throw new Error("Invalid launch setup.");const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];if(!Number.isFinite(Number(setup.launch_latitude))||Math.abs(Number(setup.launch_latitude))>85||!Number.isFinite(Number(setup.launch_longitude)))throw new Error("Invalid launch coordinates.");return newSite(setup);});sites=added;activeId=sites[0].id;writeSetup(sites[0].setup);updateFields();datasetChanged(false);renderTabs();drawSelected();drawAllMap();persist();toast("Launch setups loaded.");}catch(e){status("flight-status",e.message,"error");}finally{$("import-session").value="";}
 };
@@ -653,11 +684,42 @@ $("offline-pack").onclick=async()=>{
 function launchDocument(site,index=site.selectedIndex){
   const data=site.series?siteEntries(site).find(entry=>entry.index===index)?.result:site.result;
   if(!data)throw Error('Choose a completed launch.');
-  const one={...site,setup:{...site.setup,launch_datetime:utcInput(data.request.launch_datetime)},result:data,series:null,jobId:null,selectedIndex:0,batchSiteIndex:0};
+  const one={...site,setup:{...site.setup,...Object.fromEntries(Object.entries(data.request).filter(([key])=>setupFields.includes(key))),launch_datetime:utcInput(data.request.launch_datetime),run_mode:'single'},result:data,series:null,jobId:null,selectedIndex:0,batchSiteIndex:0};
   return BalloonFlights.pack([one],one.id);
 }
-function appendLaunchDownload(site,index){const button=document.createElement('button');button.type='button';button.className='launch-download';button.textContent='↓';button.title='Download this launch for reopening';button.setAttribute('aria-label',button.title);button.onclick=()=>BalloonFlights.download(launchDocument(site,index));$('series-launches').append(button);}
-function appendAdditionalLaunch(){const button=document.createElement('button');button.type='button';button.className='launch-add';button.textContent='+';button.title='Add another launch at this point';button.setAttribute('aria-label',button.title);button.disabled=running;button.onclick=()=>{const flight=selectedResult();$('additional-launch-time').value=utcInput(new Date(Date.parse(flight?.request.launch_datetime||fromInput($('launch_datetime').value))+3600000));$('additional-launch-status').textContent='';$('additional-launch-dialog').showModal();};$('series-launches').append(button);}
+function appendLaunchDownload(site,index,parent=$('series-launches')){const button=document.createElement('button');button.type='button';button.className='launch-download';button.textContent='↓';button.title='Download this launch for reopening';button.setAttribute('aria-label',button.title);button.onclick=()=>BalloonFlights.download(launchDocument(site,index));parent.append(button);}
+function localPlan(site,entries,selected){
+  entries.forEach((entry,index)=>{entry.index=index;entry.site_index=0;});site.series=entries.length?{type:'series',flights:entries,total:entries.length,completed:entries.filter(e=>e.status==='completed').length,failed:entries.filter(e=>e.status==='failed').length,schedule_type:'manual'}:null;site.result=null;site.batchSiteIndex=0;site.selectedIndex=selected&&entries.includes(selected)?selected.index:entries.find(e=>e.status==='completed')?.index??-1;
+  site.jobId=entries.length?(globalThis.crypto?.randomUUID?.()||'xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx'.replace(/x/g,()=>Math.floor(Math.random()*16).toString(16))).replaceAll('-',''):null;site.restorePending=Boolean(entries.length);site.revision++;
+}
+let deleteLaunch=null;
+function appendLaunchDelete(site,index,parent){const button=document.createElement('button');button.type='button';button.className='launch-delete';button.textContent='×';button.title='Remove this launch';button.setAttribute('aria-label',button.title);button.onclick=()=>{deleteLaunch={site,index};const entry=site.series?siteEntries(site).find(e=>e.index===index):null;$('delete-launch-description').textContent=(entry?.launch_datetime||site.result?.request.launch_datetime||'This launch')+' · '+site.setup.flight_name;$('delete-launch-dialog').showModal();};parent.append(button);}
+$('delete-launch-dialog').addEventListener('close',()=>{if($('delete-launch-dialog').returnValue!=='delete'||!deleteLaunch)return;const {site,index}=deleteLaunch;deleteLaunch=null;if(!sites.includes(site))return;if(running)cancelCalculation();if(site.series){const old=siteEntries(site),selected=old.find(e=>e.index===site.selectedIndex),entries=old.filter(e=>e.index!==index).map(e=>({...e}));localPlan(site,entries,selected&&selected.index!==index?entries.find(e=>e.result===selected.result&&e.launch_datetime===selected.launch_datetime):entries.find(e=>e.status==='completed'));}else{site.result=null;site.jobId=null;site.revision++;}drawSelected();drawAllMap();persist();status('flight-status','Launch removed.');});
+function appendAdditionalLaunch(){const button=document.createElement('button');button.type='button';button.className='launch-add';button.textContent='+';button.title='Add or open launches';button.setAttribute('aria-label',button.title);button.onclick=()=>{const dialog=$('additional-launch-dialog');if(!dialog.open)dialog.showModal();calculationControls();};$('series-launches').append(button);}
+function additionalChoices(){return datasets.filter(info=>info.available!==false).sort(weatherOrder);}
+function additionalSelectors(selected,requestedFamily=null){
+  const items=additionalChoices(),found=items.find(d=>d.id===selected),family=requestedFamily||weatherFamily(found||items[0]);
+  $('additional-weather-source').replaceChildren(...Object.entries(weatherFamilies).filter(([key])=>items.some(d=>weatherFamily(d)===key)).map(([key,label])=>new Option(label,key)));
+  $('additional-weather-source').value=family;const choices=items.filter(d=>weatherFamily(d)===family);
+  $('additional-dataset').replaceChildren(...choices.map(d=>new Option(runLabel(d),d.id)));$('additional-dataset').value=choices.some(d=>d.id===selected)?selected:choices[0]?.id||'';
+  $('additional-dataset-field').hidden=family==='demo'||(family.startsWith('era5')&&choices.length<=1);$('additional-dataset-label').textContent=family.startsWith('era5')?'Archive / saved subset':'Run / saved forecast';
+  additionalCoverage();
+}
+function additionalCoverage(){
+  const info=datasets.find(d=>d.id===$('additional-dataset').value);
+  $('additional-launch-coverage').textContent=info?.start&&info?.end?'Available weather: '+utcText(info.start)+' to '+utcText(info.end)+'. The whole flight must fit in this window.'+(info.source==='wrf'?' To fly later, add WRF files covering the full flight and rescan local data.':''):info?'The whole flight must fit within the selected weather coverage.':'No weather dataset is currently available for calculation. Open Manage weather to download or rescan data. Saved flights can still be opened.';
+  if(info&&!info.vertical_wind_available&&activeSite()?.setup.use_vertical_wind)$('additional-launch-coverage').textContent+=' Atmospheric vertical wind will be off for this launch because the selected dataset does not provide it.';
+  $('calculate-additional-launch').disabled=running||!info;
+}
+$('additional-weather-source').onchange=()=>additionalSelectors(null,$('additional-weather-source').value);
+$('additional-dataset').onchange=additionalCoverage;
+$('add-launch-open').onclick=()=>{
+  if(running)return;const flight=selectedResult(),selected=flight?.request.dataset||activeSite()?.setup.dataset;
+  additionalSelectors(selected);const info=datasets.find(d=>d.id===$('additional-dataset').value);let time=Date.parse(flight?.request.launch_datetime||($('launch_datetime').value+'Z'))+3600000;
+  if(!Number.isFinite(time))time=Date.now();if(info?.end&&time>Date.parse(info.end))time=Date.parse(info.start);if(info?.start&&time<Date.parse(info.start))time=Date.parse(info.start);
+  $('additional-launch-time').value=utcInput(time);$('additional-launch-status').textContent='';$('additional-launch-form').hidden=false;
+};
+
 function restoreFlights(document,visible=true){
   const saved=BalloonFlights.validate(document),defaults=readSetup();
   sites=saved.sites.map(item=>{const setup={...defaults};for(const key of setupFields)if(item.setup[key]!==undefined)setup[key]=item.setup[key];const site=newSite(setup),calculation=saved.calculations[item.calculation];site.id=typeof item.id==='string'?item.id:site.id;
@@ -665,7 +727,7 @@ function restoreFlights(document,visible=true){
     site.batchSiteIndex=Number.isInteger(item.batchSiteIndex)?item.batchSiteIndex:0;site.selectedIndex=Number.isInteger(item.selectedIndex)?item.selectedIndex:0;site.restorePending=Boolean(calculation);
     if(calculation?.flights){site.series=calculation;if(!siteEntries(site).some(e=>e.index===site.selectedIndex&&e.status==='completed'))site.selectedIndex=siteEntries(site).find(e=>e.status==='completed')?.index??-1;}else if(calculation)site.result=calculation;return site;});
   activeId=sites.some(s=>s.id===saved.activeId)?saved.activeId:sites[0].id;writeSetup(activeSite().setup);
-  if(visible){$('sounding-mode').value='ascent';$('weather-overlay-show').checked=false;$('weather-overlay-show').dispatchEvent(new Event('change'));updateFields();datasetChanged(false);drawSelected();drawAllMap();fitFlight();persist();status('flight-status','Saved flights opened · weather loads when requested.');window.BalloonWindows?.show('profile-panel');}
+  if(visible){$('sounding-mode').value='ascent';$('weather-overlay-show').checked=false;$('weather-overlay-show').dispatchEvent(new Event('change'));updateFields();datasetChanged(false,true);drawSelected();drawAllMap();fitFlight();persist();status('flight-status','Saved flights opened · weather loads when requested.');window.BalloonWindows?.show('profile-panel');}
 }
 async function ensureServerResult(original){
   if(restoredJobs.has(original))return restoredJobs.get(original);
@@ -679,15 +741,17 @@ async function ensureServerResult(original){
   persist();return restored.id;
 }
 $('save-selected-flight').onclick=()=>{saveCurrent();BalloonFlights.download(launchDocument(activeSite()));};
-$('save-all-flights').onclick=()=>{saveCurrent();BalloonFlights.download(BalloonFlights.pack(sites,activeId),'balloon-flights.bpflight');};
-$('open-flight').onchange=async()=>{try{const file=$('open-flight').files[0];if(!file)return;if(running)throw Error('Wait for the current calculation to finish before opening flights.');if(file.size>BalloonFlights.MAX)throw Error('Saved flights must be under 32 MB.');saveCurrent();await BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);restoreFlights(JSON.parse(await file.text()));await BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);}catch(error){status('flight-status',error.message,'error');}finally{$('open-flight').value='';}};
-$('recent-flights-open').onclick=async()=>{const value=await BalloonFlights.load(),list=$('recent-flights-list');list.replaceChildren();for(const entry of value.recent||[]){const button=document.createElement('button');button.className='button quiet';button.textContent=utcText(entry.saved)+' · '+entry.label;button.onclick=()=>{if(running){toast('Wait for the calculation to finish.');return;}restoreFlights(entry.document);$('recent-flights-dialog').close();};list.append(button);}if(!list.childNodes.length)list.textContent='Completed launches will appear here automatically.';$('recent-flights-dialog').showModal();};
+$('save-all-flights').onclick=()=>{saveCurrent();BalloonFlights.download(BalloonFlights.pack(sites,activeId));};
+$('open-flight').onchange=async()=>{try{const file=$('open-flight').files[0];if(!file)return;if(running)cancelCalculation();if(file.size>BalloonFlights.MAX)throw Error('Saved flights must be under 32 MB.');const document=BalloonFlights.validate(JSON.parse(await file.text()));saveCurrent();BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);restoreFlights(document);$('additional-launch-dialog').close();BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);}catch(error){status('flight-status',error.message,'error');}finally{$('open-flight').value='';}};
+$('recent-flights-open').onclick=async()=>{const value=await BalloonFlights.load(),list=$('recent-flights-list');list.replaceChildren();for(const entry of value.recent||[]){const button=document.createElement('button');button.className='button quiet';button.textContent=utcText(entry.saved)+' · '+entry.label;button.onclick=()=>{if(running)cancelCalculation();restoreFlights(entry.document);$('recent-flights-dialog').close();$('additional-launch-dialog').close();};list.append(button);}if(!list.childNodes.length)list.textContent='Completed launches will appear here automatically.';$('recent-flights-dialog').showModal();};
 document.addEventListener('bp:saveerror',event=>$('flight-save-status').textContent=event.detail);
-$('cancel-additional-launch').onclick=()=>{if(!running)$('additional-launch-dialog').close();};
+$('cancel-additional-launch').onclick=()=>$('additional-launch-dialog').close();
 $('additional-launch-form').onsubmit=async event=>{
-  event.preventDefault();if(running)return;const site=activeSite(),revision=site.revision,setup={...site.setup,launch_datetime:$('additional-launch-time').value};
-  running=true;$('calculate-additional-launch').disabled=true;window.BalloonUI?.predictionBusy(true);
-  try{const job=await api('/api/predictions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(requestFromSetup(setup))});const completed=await poll(job.id,text=>$('additional-launch-status').textContent=text);
+  event.preventDefault();if(running)return;const site=activeSite(),revision=site.revision,setup={...site.setup,dataset:$('additional-dataset').value,launch_datetime:$('additional-launch-time').value};
+  const selectedWeather=datasets.find(d=>d.id===setup.dataset);if(!selectedWeather||selectedWeather.available===false){$('additional-launch-status').textContent='Choose an available weather dataset before calculating.';return;}
+  if(!selectedWeather.vertical_wind_available)setup.use_vertical_wind=false;
+  const op=beginCalculation();$('additional-launch-status').textContent='Preparing weather and calculating…';status('flight-status','Preparing additional launch…','working');
+  try{const job=await api('/api/predictions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(requestFromSetup(setup)),signal:op.controller.signal});op.job=job.id;const completed=await poll(job.id,text=>{op.last=text;$('additional-launch-status').textContent=text;status('flight-status',text,'working');},op.controller.signal);if(calculation!==op)return;
     if(!sites.includes(site)||revision!==site.revision)throw Error('The launch setup changed while calculating.');
     const entries=site.series?siteEntries(site).map((entry,index)=>({...entry,index,site_index:0})):site.result?[{index:0,site_index:0,status:'completed',launch_datetime:site.result.request.launch_datetime,result:site.result}]:[];
     entries.push({index:entries.length,site_index:0,status:'completed',launch_datetime:completed.request.launch_datetime,result:completed});
@@ -695,5 +759,5 @@ $('additional-launch-form').onsubmit=async event=>{
     site.series={type:'series',flights:entries,total:entries.length,completed:entries.filter(e=>e.status==='completed').length,failed:entries.filter(e=>e.status==='failed').length,schedule_type:'manual'};site.result=null;site.batchSiteIndex=0;site.selectedIndex=entries.find(e=>e.result===completed).index;
     site.jobId=(globalThis.crypto?.randomUUID?.()||job.id).replaceAll('-','');site.restorePending=true;
     drawSelected();drawAllMap();fitFlight();persist();await BalloonFlights.update(BalloonFlights.pack(sites,activeId),true);$('additional-launch-dialog').close();status('flight-status','Additional launch calculated · existing tracks kept.');
-  }catch(error){$('additional-launch-status').textContent=error.message;}finally{running=false;$('calculate-additional-launch').disabled=false;window.BalloonUI?.predictionBusy(false);}
+  }catch(error){if(calculation===op){$('additional-launch-status').textContent=error.name==='AbortError'?'Calculation cancelled.':error.message;status('flight-status',$('additional-launch-status').textContent,error.name==='AbortError'?'':'error');}}finally{finishCalculation(op);}
 };

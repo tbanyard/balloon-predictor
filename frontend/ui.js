@@ -26,6 +26,6 @@
   window.BalloonUI={predictionBusy(busy){
     document.getElementById("workspace").classList.toggle("prediction-busy",busy);
     document.getElementById("flight-form").setAttribute("aria-busy",String(busy));
-    for(const node of document.querySelectorAll("[data-balloon-loader=flight]"))node.hidden=!busy;
+    for(const node of document.querySelectorAll("[data-balloon-loader=flight]"))node.hidden=!busy||Boolean(node.closest("#additional-launch-dialog")&&(!document.getElementById("additional-launch-dialog").open||document.getElementById("additional-launch-form").hidden));
   }};
 })();

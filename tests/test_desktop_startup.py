@@ -79,13 +79,13 @@ def test_windows_connection_retains_the_flight_view(monkeypatch, tmp_path, reuse
     assert (main.title, 'hide') in events and (connection.title, 'hide') in events
     assert not any(e[:2] == (connection.title, 'navigate') for e in events), 'Reopening the chooser must not navigate its retained page.'
     for view in (main, connection):
-        assert view.native.webview.CoreWebView2.Settings.UserAgent.startswith('Actual Edge engine BalloonPredictor/1.6.4 ')
+        assert view.native.webview.CoreWebView2.Settings.UserAgent.startswith('Actual Edge engine BalloonPredictor/1.6.6 ')
 
 
 def test_resume_publishes_reuse_without_reopening_the_connection(tmp_path):
     target = tmp_path/'target.json'
     chooser = Chooser(tmp_path, target_file=target)
-    chooser.activate('http://127.0.0.1:8009', navigation='http://127.0.0.1:8009/signin?ticket=example')
+    chooser.activate('http://127.0.0.1:8011', navigation='http://127.0.0.1:8011/signin?ticket=example')
     first = read_json(target)
     assert first['generation'] == 1 and first['reuse'] is False
     assert first['navigation'].endswith('ticket=example')
@@ -121,7 +121,7 @@ def test_gtk_server_screen_preserves_webview_and_resume_does_not_load_again(monk
                                  run_javascript=lambda script,cancel,callback,data:resets.append((script,callback)))
     app.views = SimpleNamespace(set_visible_child_name=shown.append)
     chooser = Chooser(tmp_path, target_file=tmp_path/'target.json')
-    chooser.activate('http://127.0.0.1:8009')
+    chooser.activate('http://127.0.0.1:8011')
     app.present_flight()
     app.show_chooser()
     assert len(loads) == 1 and chooser_loads[-1].endswith('?splash=done&native=1')
@@ -134,6 +134,6 @@ def test_gtk_server_screen_preserves_webview_and_resume_does_not_load_again(monk
     assert shown[-1]=='flight', 'Old chooser fields were revealed before reset completed.'
     resets[-1][1]()
     assert shown[-1]=='chooser'
-    chooser.activate('http://127.0.0.1:8009')
+    chooser.activate('http://127.0.0.1:8011')
     app.present_flight()
     assert len(loads) == 2, 'An explicit new connection must navigate, even to the same URL.'

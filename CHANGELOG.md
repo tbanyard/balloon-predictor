@@ -1,3 +1,22 @@
+## v1.6.6
+
+- Native WRF predictions retain up to three source files during each calculation and reuse bounded 3D tiles across flight steps, sensitivity members, series and arrival solving. Keep original model resolution, interpolation, integration, physics and seeded sensitivity behavior. Close handles on completion, failure and cancellation; retain existing thread/worker settings.
+- Add optional vertical-velocity weather layers in m/s, at altitude or model pressure, with disabled unavailable choices, missing-value masks, sign guidance and diverging colours. Preserve the ordinary map reader paths when the field is not requested.
+- Modestly boost horizontal wind animation at wide zoom without changing forecast values.
+- Add model/run selection to the additional-launch dialog, retain mixed-model tracks and each launch's weather/profile/export source, and show full-year/model launch labels.
+- Align the launch date/time heading above its editable fields and calendar; preserve the selected model in single-flight saves.
+- Default port 8011; source and installer workflows updated for all platforms.
+
+## v1.6.5
+
+- Native WRF weather maps use contiguous tiled reads, retained frame handles, selective vertical reads and cached 2D slices. Adaptive viewport detail can exceed 40 × 40 and approach the native 1 km grid, with bounded coarse sampling at far zoom. Other model readers and trajectory calculations retain their existing behavior.
+- Keep + usable after failed launch batches; group Add/Open/Recent under its menu. Show weather coverage, explain missing WRF frames and animate added-launch progress.
+- Confirm removal of individual completed/unavailable launches. Cancel calculation immediately on the device, cooperatively on a reachable server, and prevent late results replacing opened flights.
+- Normalize empty/legacy Android saved-flight history, permit local file opening during disconnection and use UTC/model/initialization/valid-time/sensitivity/site filenames.
+- Preserve nanosecond source receipts losslessly across browser/Android saved-flight export and restoration; keep strict checks for changed source files.
+- Align the Save flight(s) and NetCDF cards, add a compact weather colour key to the map, and offer white/black animated-wind contrast without reloading data.
+- Default server port 8010; prepare/release source and workflows for Windows, Universal macOS, Android and Debian.
+
 ## v1.6.4
 
 - Keep a stable local origin while SSH reconnects; reuse passwords only in memory and defer new sign-in prompts until an action needs the server. Keep the flight document and show a quiet connection dot.

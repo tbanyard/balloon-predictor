@@ -17,6 +17,7 @@ const delay=ms=>new Promise(r=>setTimeout(r,ms));
  const errors=[],vc=new VirtualConsole();vc.on('jsdomError',e=>errors.push(e.message));
  const html=fs.readFileSync(path.join(root,'frontend/index.html'),'utf8').replace(/<script[^>]+src=[^>]+><\/script>/g,'');
  dom=new JSDOM(html,{url:base,runScripts:'outside-only',pretendToBeVisual:true,virtualConsole:vc});const w=dom.window,$=id=>w.document.getElementById(id),downloads=[];
+ w.AbortController=AbortController;
  const realFetch=(url,options)=>fetch(new URL(url,base),options);w.fetch=realFetch;
  w.HTMLAnchorElement.prototype.click=function(){downloads.push({url:this.href,name:this.download});};
  w.SVGSVGElement.prototype.createSVGRect=()=>({});w.HTMLDialogElement.prototype.showModal=function(){this.open=true;};w.HTMLDialogElement.prototype.close=function(){this.open=false;};w.matchMedia=()=>({matches:false});

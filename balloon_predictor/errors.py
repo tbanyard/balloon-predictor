@@ -6,6 +6,10 @@ class CoverageError(PredictorError):
     """The flight has left the available weather coverage."""
 
 
+class JobCancelled(Exception):
+    """Cooperative cancellation, deliberately outside flight coverage errors."""
+
+
 class MissingTerrainError(CoverageError):
     """A specific required physical elevation sample was unavailable."""
 

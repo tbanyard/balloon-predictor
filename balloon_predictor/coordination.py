@@ -1,10 +1,12 @@
 """Schedule different balloons to reach one AMSL altitude at one UTC time."""
 from datetime import datetime, timedelta
 
+from .weather.wrf_reader import scoped_prediction
 from .errors import PredictorError
 from .predictor import predict, run_flight
 
 
+@scoped_prediction
 def plan_arrivals(request, store, progress=lambda message: None):
     entries = []
     for site, template in enumerate(request.flights):
@@ -13,7 +15,7 @@ def plan_arrivals(request, store, progress=lambda message: None):
             launch = request.arrival_datetime - timedelta(seconds=duration)
             name = f"{template.flight_name} · {rate:g} m/s"
             entry = {"index": len(entries), "site_index": site, "flight_name": name,
-                     "ascent_rate": rate, "launch_datetime": launch.isoformat().replace("+00:00", "Z")}
+                     "ascent_rate": rate, "dataset":template.dataset, "launch_datetime": launch.isoformat().replace("+00:00", "Z")}
             progress(f"Coordinating balloon {len(entries)+1} · {name}")
             try:
                 if duration > template.max_duration_hours * 3600:
@@ -23,7 +25,7 @@ def plan_arrivals(request, store, progress=lambda message: None):
                         "burst_altitude": request.target_altitude, "ascent_rate": rate,
                         "ensemble_members": 0, "flight_name": name})
                     weather = store.get(body.dataset, launch)
-                    flight = run_flight(body, weather)
+                    flight = run_flight(body, weather, cancel_check=getattr(progress, "check_cancelled", None))
                     actual = datetime.fromisoformat(flight["summary"]["burst"]["datetime"].replace("Z", "+00:00"))
                     error = (actual - request.arrival_datetime).total_seconds()
                     if abs(error) <= .25:
@@ -33,7 +35,7 @@ def plan_arrivals(request, store, progress=lambda message: None):
                     launch -= timedelta(seconds=error)
                 else:
                     raise PredictorError("Launch-time solver did not converge within 0.25 s. Revise vertical-wind settings or flight parameters.")
-                result = predict(body, weather)
+                result = predict(body, weather, progress)
                 entry.update(status="completed", result=result,
                              launch_datetime=body.launch_datetime.isoformat().replace("+00:00", "Z"),
                              arrival_error_seconds=error)

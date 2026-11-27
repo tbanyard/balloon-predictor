@@ -2,7 +2,7 @@ name: Windows installer (test)
 
 on:
   push:
-    branches: [release-v1.6.4-test]
+    branches: [release-v1.6.6-test]
   workflow_dispatch:
 
 permissions:

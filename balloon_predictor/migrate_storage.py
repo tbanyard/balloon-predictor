@@ -89,7 +89,7 @@ def copy_data(source, target, progress=print):
             shutil.rmtree(stage)
 
 
-def prepare(shared_root, source, old_config, port=8009, *, fresh=False, progress=print):
+def prepare(shared_root, source, old_config, port=8011, *, fresh=False, progress=print):
     root = Path(shared_root).expanduser().resolve()
     if root.is_symlink():
         raise PredictorError("The shared storage root must not be a symbolic link.")
@@ -137,7 +137,7 @@ def main():
     parser.add_argument("--shared-root", type=Path, default=SHARED_DATA_ROOT)
     parser.add_argument("--source", type=Path, help="Old data folder; defaults to the old config's data_dir or ~/.local/share/balloon-predictor.")
     parser.add_argument("--config", type=Path, default=Path(__file__).resolve().parents[1] / "config.yml")
-    parser.add_argument("--port", type=int, default=8009)
+    parser.add_argument("--port", type=int, default=8011)
     parser.add_argument("--fresh", action="store_true", help="Keep the destination; do not copy the old data.")
     args = parser.parse_args()
     if not 1 <= args.port <= 65535:

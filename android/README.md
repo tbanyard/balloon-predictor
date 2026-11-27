@@ -1,4 +1,4 @@
-For v1.6.4 shared storage, browser sign-in and the Local/Server choices, see [the v1.6.4 guide](../docs/V1.6.4.md).
+For v1.6.6 shared storage, browser sign-in and the Local/Server choices, see [the v1.6.6 guide](../docs/V1.6.6.md).
 
 # Android client
 
@@ -15,5 +15,5 @@ uses the encrypted `BP_ANDROID_KEYSTORE`, `BP_ANDROID_STORE_PASSWORD`, and
 `BP_ANDROID_KEY_PASSWORD` secrets. The emulator test uses real SSH against a
 localhost fixture and checks that Server settings preserve the calculated flight.
 
-See [Android offline flights](../docs/V1.6.4.md#android-local-operation)
+See [Android offline flights](../docs/V1.6.6.md#android-local-operation)
 for preparing and opening a regional forecast pack before a launch.

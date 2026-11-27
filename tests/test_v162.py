@@ -151,7 +151,7 @@ def test_144_hour_window_is_allowed_after_confirmation(utc,source):
 
 
 def test_new_server_default_port():
-    assert inspect.signature(prepare).parameters['port'].default==8009
+    assert inspect.signature(prepare).parameters['port'].default==8011
 
 
 def test_overlay_pressure_api_and_long_download_validation(tmp_path,utc,monkeypatch):

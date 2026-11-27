@@ -314,6 +314,13 @@ def scan_wrf(root, *, shared=False, wind_reference=None):
 
 
 class WRFWeather(NativeWeather):
+    def time_bracket(self, when):
+        if when.timestamp() < self.times[0]-1e-7 or when.timestamp() > self.times[-1]+1e-7:
+            start = datetime.fromtimestamp(self.times[0], timezone.utc)
+            end = datetime.fromtimestamp(self.times[-1], timezone.utc)
+            raise CoverageError(f"WRF time {when:%Y-%m-%d %H:%M:%S} UTC is outside the available files ({start:%Y-%m-%d %H:%M:%S} to {end:%Y-%m-%d %H:%M:%S} UTC). Add WRF frames covering the whole flight and rescan local data, or choose an earlier launch/shorter flight.")
+        return super().time_bracket(when)
+
     def __init__(self, info, cache, max_gap):
         if not info["available"]:
             raise PredictorError(" ".join(info["warnings"]))
@@ -339,6 +346,13 @@ class WRFWeather(NativeWeather):
                                   "Parachute descent uses dry density; humidity is used for the sounding."]
 
     def raw_column(self, ti, y, x):
+        from .wrf_reader import active_reader
+        reader = active_reader()
+        if reader is not None:
+            return reader.column(self, ti, y, x)
+        return self._raw_column_scalar(ti, y, x)
+
+    def _raw_column_scalar(self, ti, y, x):
         _, path, index = self.records[ti]
         stat = Path(path).stat()
         record_file(self, path)

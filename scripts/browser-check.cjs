@@ -35,7 +35,7 @@ const assert=(condition,message)=>{if(!condition)throw new Error(message);};
   assert(ready,'Server failed: '+logs);browser=await chromium.launch({headless:true, ...(process.env.BP_TEST_CHROME?{executablePath:process.env.BP_TEST_CHROME,args:["--no-sandbox","--disable-dev-shm-usage"]}: {})});const context=await browser.newContext({viewport:{width:1540,height:1000},deviceScaleFactor:1,acceptDownloads:true});
   await context.route('https://**/*',route=>route.abort());const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
   await page.goto(base);await page.waitForFunction(()=>document.querySelector('#flight-tabs button'));
-  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.6.4','Version badge missing');
+  assert(await page.inputValue('#dataset')==='era5','ERA5 is not the default');assert(await page.locator('.version').textContent()==='v1.6.6','Version badge missing');
   assert(await page.locator('#dataset-run-field').isHidden(),'ERA5 should not show a forecast-run selector');
   assert(await page.locator('#sensitivity-display button').isDisabled(),'Sensitivity view enabled with no members');
   await page.setViewportSize({width:1120,height:800});

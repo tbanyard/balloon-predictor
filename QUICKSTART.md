@@ -1,16 +1,16 @@
-# BalloonPredictor v1.6.4
+# BalloonPredictor v1.6.6
 
-For your shared Linux server, stop the previous process on 8009, extract this
+For your shared Linux server, keep 8011 free and extract this
 version, activate Python 3.12 or newer, and run from its source directory:
 
 ```bash
 bash start-shared-server.sh
 ```
 
-Open **http://YOUR-SERVER:8009** over your VPN and sign in with your normal server
+Open **http://YOUR-SERVER:8011** over your VPN and sign in with your normal server
 username and password. There is no separate command or timed link. The existing
-BP_Data folders and .server-8009 configuration are retained. See
-[the shared-server guide](docs/V1.6.4.md) for first-time migration and SSH settings.
+BP_Data user folders are retained; the launcher prepares .server-8011 for this port. See
+[the shared-server guide](docs/V1.6.6.md) for first-time migration and SSH settings.
 
 For a standalone source installation, extract the ZIP anywhere you can write.
 Python 3.12 or newer is required. To keep concurrently running versions
@@ -19,22 +19,22 @@ independent, use a separate Conda environment:
 ```bash
 conda create -n balloon-v16 -c conda-forge python=3.12 pip
 conda activate balloon-v16
-cd balloon-predictor-v1.6.4
+cd balloon-predictor-v1.6.6
 python -m pip install -r requirements.lock.txt
 python -m pip check
-bash start.sh --port 8009
+bash start.sh --port 8011
 ```
 
 Install once in that environment. For subsequent launches:
 
 ```bash
 conda activate balloon-v16
-cd balloon-predictor-v1.6.4
-bash start.sh --port 8009
+cd balloon-predictor-v1.6.6
+bash start.sh --port 8011
 ```
 
-Open **http://127.0.0.1:8009**. Use another free port if an existing server is
-already on 8009, or stop that server first. A server on port 8000 can keep
+Open **http://127.0.0.1:8011**. Use another free port if an existing server is
+already on 8011, or stop that server first. A server on port 8000 can keep
 running in its own environment. Avoid changing packages in an environment used
 by another running application.
 
@@ -56,7 +56,7 @@ older processes are using it.
 For a remote server, forward the port from your computer:
 
 ```bash
-ssh -L 8009:127.0.0.1:8009 tim@YOUR_SERVER
+ssh -L 8011:127.0.0.1:8011 tim@YOUR_SERVER
 ```
 
 ## Weather and terrain
@@ -111,7 +111,7 @@ geometric line or eliminate forecast uncertainty.
 
 ## More details
 
-- [docs/V1.6.4.md](docs/V1.6.4.md): browser login, storage and current installers.
+- [docs/V1.6.6.md](docs/V1.6.6.md): browser login, storage and current installers.
 - [docs/V1.4.md](docs/V1.4.md): earlier interface changes and verification limits.
 - [docs/V1.3.md](docs/V1.3.md): model-box contents, terrain physics and cleanup.
 - [docs/API-AND-ORIGINS.md](docs/API-AND-ORIGINS.md): API/OAS/GET/POST and Data origins.

@@ -11,12 +11,12 @@ from tempfile import TemporaryDirectory
 
 REPO = "tbanyard/balloon-predictor"
 REMOTE = "https://github.com/" + REPO + ".git"
-BRANCH, VERSION = "release-v1.6.4-test", "1.6.4"
+BRANCH, VERSION = "release-v1.6.6-test", "1.6.6"
 PLATFORMS = {
-    "Windows installer (test)": ("BalloonPredictor-Windows-x64-test", "BalloonPredictor-1.6.4-Windows-x64-Setup.exe"),
-    "macOS installer (test)": ("BalloonPredictor-macOS-Universal-test", "BalloonPredictor-1.6.4-macOS-Universal.dmg"),
-    "Android app (test)": ("BalloonPredictor-Android-test", "BalloonPredictor-1.6.4-Android.apk"),
-    "Debian installer (test)": ("BalloonPredictor-Debian-amd64-test", "BalloonPredictor-1.6.4-Debian-amd64.deb"),
+    "Windows installer (test)": ("BalloonPredictor-Windows-x64-test", "BalloonPredictor-1.6.6-Windows-x64-Setup.exe"),
+    "macOS installer (test)": ("BalloonPredictor-macOS-Universal-test", "BalloonPredictor-1.6.6-macOS-Universal.dmg"),
+    "Android app (test)": ("BalloonPredictor-Android-test", "BalloonPredictor-1.6.6-Android.apk"),
+    "Debian installer (test)": ("BalloonPredictor-Debian-amd64-test", "BalloonPredictor-1.6.6-Debian-amd64.deb"),
 }
 WORKFLOW_NAMES = {
     ".github/workflows/tests.yml": "Python and browser checks",
@@ -121,7 +121,7 @@ def collect_artifact(folder, artifact, filename, commit, run_id):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=Path.home()/"balloon-predictor-releases"/"v1.6.4")
+    parser.add_argument("--output", type=Path, default=Path.home()/"balloon-predictor-releases"/"v1.6.6")
     parser.add_argument("--publish", action="store_true", help="Publish the release and fast-forward main after verification.")
     parser.add_argument("--allow-test-apk", action="store_true", help="Allow a temporarily signed APK in a draft release.")
     parser.add_argument("--check-only", action="store_true", help="Download and verify files without changing GitHub.")
@@ -147,14 +147,14 @@ def main():
         if filename.endswith(".apk") and report.get("signing") != "release":
             if args.publish or not args.allow_test_apk:
                 raise ValueError("This APK uses a temporary test key. Run setup-android-signing.sh before preparing a fresh test commit, or use --allow-test-apk for a draft that can be installed for testing. Google Play is not required.")
-    source_zip = output / "balloon-predictor-v1.6.4.zip"
+    source_zip = output / "balloon-predictor-v1.6.6.zip"
     with TemporaryDirectory(prefix="source-", dir=output) as work:
         checkout = Path(work) / "repo"
         run("git", "clone", "--quiet", "--no-tags", "--single-branch", "--branch", BRANCH, REMOTE, str(checkout))
         actual = run("git", "rev-parse", "HEAD", cwd=checkout, capture_output=True).stdout.strip()
         if actual != commit:
             raise ValueError("The test branch moved while files were being verified. Rerun to use its new commit.")
-        run("git", "archive", "--format=zip", "--prefix=balloon-predictor-v1.6.4/",
+        run("git", "archive", "--format=zip", "--prefix=balloon-predictor-v1.6.6/",
             "--output", str(source_zip), commit, cwd=checkout)
         assets.append(source_zip)
         summary = output / "BUILD-REPORT.json"
@@ -170,7 +170,7 @@ def main():
         # A draft is reviewable; main advances only when --publish is explicit.
         tag = "v" + VERSION
         notes = output / "RELEASE-NOTES.md"
-        notes.write_text((checkout / "docs/V1.6.4.md").read_text(), encoding="utf-8")
+        notes.write_text((checkout / "docs/V1.6.6.md").read_text(), encoding="utf-8")
         refs = run("git", "ls-remote", REMOTE, f"refs/tags/{tag}", f"refs/tags/{tag}^{{}}",
                    capture_output=True).stdout.splitlines()
         tagged = next((line.split()[0] for line in refs if line.endswith("^{}")), refs[0].split()[0] if refs else None)
@@ -187,7 +187,7 @@ def main():
             run("gh", "release", "upload", tag, "--repo", REPO, "--clobber", *(str(file) for file in assets))
         else:
             run("gh", "release", "create", tag, "--repo", REPO, "--target", commit, "--draft",
-                "--title", "BalloonPredictor v1.6.4", "--notes-file", str(notes), *(str(file) for file in assets))
+                "--title", "BalloonPredictor v1.6.6", "--notes-file", str(notes), *(str(file) for file in assets))
         if args.publish:
             if not tagged:
                 run("git", "-c", "credential.helper=", "-c", "credential.helper=!gh auth git-credential",

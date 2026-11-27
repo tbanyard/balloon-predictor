@@ -124,7 +124,7 @@ def overlay_area(base, request, result, options):
     n,w,s,e = available
     regional = n-s <= 40 and e-w <= 80 and not periodic
     if options.coverage == "auto":
-        if regional:
+        if regional and not isinstance(base, WRFWeather):
             return available,available,"model"
         area = list(options.area) if options.area else [min(85.,request.launch_latitude+10),request.launch_longitude-13,max(-85.,request.launch_latitude-10),request.launch_longitude+13]
         area[0],area[2] = min(area[0],n),max(area[2],s)
@@ -155,51 +155,74 @@ def sample_overlay(result, options, store, progress=lambda message: None):
     when = request.launch_datetime if options.time_basis == "launch" else datetime.fromisoformat(target["datetime"].replace("Z", "+00:00"))
     progress("Loading the selected flight's weather")
     base = store.get(request.dataset,when)
+    include_w = options.include_vertical_velocity
+    vertical_available = bool(base.info.get('vertical_wind_available'))
+    if include_w and not vertical_available:
+        raise PredictorError('Vertical velocity is unavailable in this flight’s weather dataset.')
     area,available,coverage_mode = overlay_area(base,request,result,options)
     north,west,south,east = area
     if north<=south or east<=west:
         raise CoverageError("The visible map is outside this flight's weather coverage. Move the map back inside its model boundary.")
-    latitudes = np.linspace(south,north,options.grid_size)
-    longitudes = np.linspace(west,east,options.grid_size)
-    base = prepare_native(base,when,latitudes,longitudes,progress)
-    weather = flight_weather(base,request)
-    demo_height = demo_pressure_height(base,pressure*100,when) if pressure is not None and isinstance(base,DemoWeather) else None
-    fields = {name:[] for name in ("temperature_c","u","v","wind_speed","altitude_m")}
-    valid = estimated = 0
-    label = f"{pressure:g} hPa" if pressure is not None else f"{altitude:,.0f} m AMSL"
-    heights = []
-    for row,lat in enumerate(latitudes):
-        values = {name:[] for name in fields}
-        progress(f"Sampling at {label} · row {row+1}/{len(latitudes)}")
-        for lon in longitudes:
-            previous = weather.bridge["sample_calls"]
-            try:
-                lon = float((lon+180)%360-180)
-                if pressure is not None:
-                    sample,height = sample_pressure(base,float(lat),lon,pressure*100,when,demo_height)
-                else:
-                    sample = weather.sample(float(lat),lon,altitude,when)
-                    height = altitude
-                numbers = (sample.temperature-273.15,sample.u,sample.v,math.hypot(sample.u,sample.v),height)
-                if not all(math.isfinite(value) for value in numbers):
-                    raise CoverageError("Missing weather at this map cell.")
-                valid += 1
-                heights.append(height)
-                estimated += weather.bridge["sample_calls"]>previous
-            except CoverageError:
-                numbers = (None,)*len(fields)
-            for name,number in zip(fields,numbers):
-                values[name].append(number)
-        for name in fields:
-            fields[name].append(values[name])
+    native_wrf = isinstance(base, WRFWeather)
+    wrf_step = 1
+    if native_wrf:
+        from .wrf_overlay import dimensions, sample, encode
+        ny,nx,wrf_step = dimensions(base, area, options)
+        latitudes,longitudes = np.linspace(south,north,ny),np.linspace(west,east,nx)
+        fields,mask,estimates = sample(base,when,latitudes,longitudes,altitude,pressure*100 if pressure is not None else None,request.below_model_policy,wrf_step,progress,include_w)
+        valid,estimated = int(mask.sum()),int(estimates.sum())
+        heights = fields['altitude_m'][mask].tolist()
+        grid_fields = encode(fields) if options.wrf_detail else {k:[[float(v) if math.isfinite(v) else None for v in row] for row in values] for k,values in fields.items()}
+        weather = flight_weather(base,request)
+    else:
+        latitudes = np.linspace(south,north,options.grid_size)
+        longitudes = np.linspace(west,east,options.grid_size)
+        base = prepare_native(base,when,latitudes,longitudes,progress)
+        weather = flight_weather(base,request)
+        demo_height = demo_pressure_height(base,pressure*100,when) if pressure is not None and isinstance(base,DemoWeather) else None
+        fields = {name:[] for name in (("temperature_c","u","v","wind_speed","altitude_m","w") if include_w else ("temperature_c","u","v","wind_speed","altitude_m"))}
+        valid = estimated = 0
+        label = f"{pressure:g} hPa" if pressure is not None else f"{altitude:,.0f} m AMSL"
+        heights = []
+        for row,lat in enumerate(latitudes):
+            values = {name:[] for name in fields}
+            progress(f"Sampling at {label} · row {row+1}/{len(latitudes)}")
+            for lon in longitudes:
+                previous = weather.bridge["sample_calls"]
+                try:
+                    lon = float((lon+180)%360-180)
+                    if pressure is not None:
+                        sample,height = sample_pressure(base,float(lat),lon,pressure*100,when,demo_height,include_w)
+                    else:
+                        sample = weather.sample(float(lat),lon,altitude,when)
+                        height = altitude
+                    numbers = (sample.temperature-273.15,sample.u,sample.v,math.hypot(sample.u,sample.v),height)
+                    if not all(math.isfinite(value) for value in numbers):
+                        raise CoverageError("Missing weather at this map cell.")
+                    if include_w:numbers += (sample.w if math.isfinite(sample.w) else None,)
+                    valid += 1
+                    heights.append(height)
+                    estimated += weather.bridge["sample_calls"]>previous
+                except CoverageError:
+                    numbers = (None,)*len(fields)
+                for name,number in zip(fields,numbers):
+                    values[name].append(number)
+            for name in fields:
+                fields[name].append(values[name])
+        grid_fields = fields
     validate_manifest(result)
     for entry in getattr(weather.model,"source_receipts",{}).values():
         if receipt(entry["path"]) != entry:
             raise PredictorError("Weather changed while preparing this overlay. Re-run the prediction before displaying it.")
     if not valid:
         raise CoverageError("No valid weather at this height/pressure and time in the available area. Check the model's represented levels, terrain and time coverage, or calculate a new flight.")
+    vertical_valid = (int(np.isfinite(fields['w']).sum()) if native_wrf else sum(v is not None and math.isfinite(v) for row in fields.get('w',[]) for v in row)) if include_w else None
+    if include_w and not vertical_valid:
+        raise CoverageError('No valid vertical velocity at this height/pressure and time. Choose another level or flight.')
     total = len(latitudes)*len(longitudes)
     warnings = []
+    if include_w and vertical_valid < valid:
+        warnings.append('Areas with missing vertical velocity are transparent in that field.')
     if valid<total:
         warnings.append("Areas outside model coverage, below model ground or with missing atmospheric layers are transparent.")
     if estimated:
@@ -215,6 +238,8 @@ def sample_overlay(result, options, store, progress=lambda message: None):
             "launch_datetime":request.launch_datetime.isoformat().replace("+00:00","Z"),"target_datetime":target["datetime"],
             "time_basis":options.time_basis,"height_kind":"pressure" if pressure is not None else "custom" if options.altitude_m is not None else "burst" if result["summary"].get("landing") else "target",
             "bounds":area,"model_bounds":available,"coverage_mode":coverage_mode,
-            "grid":{"latitude":latitudes.tolist(),"longitude":longitudes.tolist(),**fields},
+            "grid":{"latitude":latitudes.tolist(),"longitude":longitudes.tolist(),**grid_fields},
+            "vertical_velocity_available":vertical_available,"vertical_velocity_valid_cells":vertical_valid,"vertical_velocity_units":"m/s; positive upwards",
+            "wrf_native":bool(native_wrf and options.wrf_detail),"native_grid_step":wrf_step,
             "valid_cells":valid,"total_cells":total,"estimated_cells":estimated,"warnings":warnings,
             "description":"Saved flight weather at fixed altitude AMSL, or interpolated on adjacent native levels in log pressure then in horizontal position and time. Winds are earth-relative. Animation illustrates flow at this fixed weather time."}

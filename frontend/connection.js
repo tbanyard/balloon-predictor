@@ -2,7 +2,7 @@
 (()=>{
   'use strict';
   const endpoint='/__bp_connection/',labels={connected:'Connected',reconnecting:'Reconnecting…',signin_required:'Sign-in required'};
-  let username=null,native=false,known=false,state='connected',recovery=null,checking=null,promptId=null,abortPrompt=null;
+  let username=null,native=false,known=false,state='connected',recovery=null,checking=null,promptId=null,abortPrompt=null,recoveryStop=null;
   const indicator=document.querySelector('.local-indicator');
   if(indicator){indicator.classList.add('connection-indicator');indicator.setAttribute('role','status');}
   function show(value,mode='server'){
@@ -12,8 +12,11 @@
   }
   async function raw(path,options={}){
     const ctrl=new AbortController(),timer=setTimeout(()=>ctrl.abort(),options.timeout||15000);
-    try{return await fetch(path,{...options,signal:options.signal||ctrl.signal,cache:'no-store'});}finally{clearTimeout(timer);}
+    const stop=()=>ctrl.abort();if(options.signal?.aborted)ctrl.abort();else options.signal?.addEventListener('abort',stop,{once:true});
+    try{return await fetch(path,{...options,signal:ctrl.signal,cache:'no-store'});}finally{clearTimeout(timer);options.signal?.removeEventListener('abort',stop);}
   }
+  function aborted(){return new DOMException('Calculation cancelled','AbortError');}
+  function waitFor(promise,signal){if(!signal)return promise;if(signal.aborted)return Promise.reject(aborted());return new Promise((resolve,reject)=>{const stop=()=>reject(aborted());signal.addEventListener('abort',stop,{once:true});promise.then(resolve,reject).finally(()=>signal.removeEventListener('abort',stop));});}
   async function control(action,data){
     const response=await raw(endpoint+action,data===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)});
     if(!response.ok)throw Error('The connection could not recover. Check the VPN and server. Your flights remain open.');
@@ -38,7 +41,7 @@
     form.onsubmit=async event=>{event.preventDefault();const values=inputs.map(input=>input.value);inputs.forEach(input=>input.value='');try{await submit(values);}catch(error){message.textContent=error.message;}};
     if(!modal.open)modal.showModal();(inputs[0]||form.querySelector('button')).focus();
   }
-  function cancel(){abortPrompt?.();clearPrompt();}
+  function cancel(){recoveryStop?.abort();abortPrompt?.();clearPrompt();}
   modal.querySelector('[data-cancel]').onclick=cancel;modal.addEventListener('cancel',event=>{event.preventDefault();cancel();});
   async function webLogin(){
     let done=false,failure=null,polling=false;
@@ -57,14 +60,15 @@
   async function recover(renew=false){
     if(recovery)return recovery;
     recovery=(async()=>{
-      const first=await check();let cancelled=false;
-      abortPrompt=()=>{cancelled=true;if(native)control('cancel',{}).catch(()=>{});};
+      const stop=new AbortController();recoveryStop=stop;
+      const first=await check();if(stop.signal.aborted)throw aborted();
+      abortPrompt=()=>{stop.abort();if(native)control('cancel',{}).catch(()=>{});};
       if(native){
         if(first.status!=='connected')await control('recover',{});
         const deadline=Date.now()+300000;
         for(;;){
-          if(cancelled)throw Error('Reconnection cancelled. Your flights remain open.');
-          const info=await control('state');show(info.status);
+          if(stop.signal.aborted)throw Error('Reconnection cancelled. Your flights remain open.');
+          const info=await control('state');if(stop.signal.aborted)throw aborted();show(info.status);
           if(info.status==='connected')break;
           if(info.challenge&&info.challenge.id!==promptId){promptId=info.challenge.id;question(info.challenge.text,info.challenge.prompts,values=>control('answer',{id:info.challenge.id,values}));}
           if(info.status==='signin_required'&&!info.challenge&&!modal.open){question('The server needs you to sign in again.',[],()=>control('recover',{}));}
@@ -80,20 +84,22 @@
         }
       }else{
         let info=first;
-        for(let i=0;info.status==='reconnecting'&&i<15;i++){await new Promise(r=>setTimeout(r,2000));info=await check();}
+        for(let i=0;info.status==='reconnecting'&&i<15;i++){if(stop.signal.aborted)throw aborted();await new Promise(r=>setTimeout(r,2000));info=await check();}
+        if(stop.signal.aborted)throw aborted();
         if(info.status==='reconnecting')throw Error('Could not reach BalloonPredictor. Check the VPN and server. Your saved flights remain available.');
         if(info.status==='signin_required'||renew)await webLogin();
       }
       show('connected');
-    })().finally(()=>{clearPrompt();abortPrompt=null;recovery=null;});
+    })().finally(()=>{clearPrompt();abortPrompt=null;recovery=null;recoveryStop=null;});
     return recovery;
   }
   async function request(path,options={}){
+    const recoverForRequest=async renew=>{const stop=()=>cancel();options.signal?.addEventListener('abort',stop,{once:true});try{await waitFor(recover(renew),options.signal);}finally{options.signal?.removeEventListener('abort',stop);}if(options.signal?.aborted)throw aborted();};
     let response;
     try{response=await raw(path,{...options,timeout:45000});}
-    catch(error){await recover();if((options.method||'GET').toUpperCase()!=='GET'&&!options.headers?.['X-BP-Request-ID'])throw Error('The connection is restored. Repeat that action; your current flights remain open.');return raw(path,{...options,timeout:45000});}
-    if(response.status===401){let value;try{value=await response.clone().json();}catch{}if(value?.login_required){await recover(true);return raw(path,{...options,timeout:45000});}}
-    if(response.status===503&&response.headers.get('X-Balloon-Reconnect')==='yes'){await recover();return raw(path,{...options,timeout:45000});}
+    catch(error){if(options.signal?.aborted)throw aborted();await recoverForRequest();if((options.method||'GET').toUpperCase()!=='GET'&&!options.headers?.['X-BP-Request-ID'])throw Error('The connection is restored. Repeat that action; your current flights remain open.');return raw(path,{...options,timeout:45000});}
+    if(response.status===401){let value;try{value=await response.clone().json();}catch{}if(value?.login_required){await recoverForRequest(true);return raw(path,{...options,timeout:45000});}}
+    if(response.status===503&&response.headers.get('X-Balloon-Reconnect')==='yes'){await recoverForRequest();return raw(path,{...options,timeout:45000});}
     return response;
   }
   window.BalloonNetwork={request,check,recover,control,get native(){return native;},get state(){return state;},get username(){return username;}};

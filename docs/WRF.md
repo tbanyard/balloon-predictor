@@ -92,3 +92,11 @@ References:
 
 - [NCAR WRF output variables](https://www2.mmm.ucar.edu/wrf/site/users_guide/output_variables.html)
 - [NCAR WRF output documentation](https://www2.mmm.ucar.edu/wrf/site/documentation/users_guide/output.html)
+
+## Native WRF weather map performance
+
+See [v1.6.6](V1.6.6.md#wrf-weather-maps) for adaptive map detail, cached native tiles and selected-level reads. These map-only changes do not coarsen trajectory sampling. If a requested UTC time lies beyond the available WRF frames, add the missing frames covering the entire flight and use Manage weather → Rescan local data.
+
+## Native WRF prediction I/O
+
+[v1.6.6](V1.6.6.md#faster-native-wrf-predictions) keeps source files open during calculations and reuses full-resolution 3D blocks within the existing memory budget. No conversion, coarsening, multicore setting or new disk cache is required.

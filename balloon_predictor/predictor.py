@@ -4,6 +4,7 @@ import math
 
 import numpy as np
 
+from .weather.wrf_reader import scoped_prediction
 from .errors import CoverageError, MissingTerrainError, PredictorError
 from .weather.schema import EARTH_RADIUS
 from .context import flight_weather
@@ -19,7 +20,10 @@ def distance_km(a, b):
     return 2 * EARTH_RADIUS * math.asin(min(1.0, math.sqrt(h))) / 1000
 
 
-def run_flight(request, weather, wind_bias=(0, 0)):
+@scoped_prediction
+def run_flight(request, weather, wind_bias=(0, 0), cancel_check=None):
+    if cancel_check:
+        cancel_check()
     weather = flight_weather(weather, request)
     if request.use_vertical_wind and not weather.info.get("vertical_wind_available"):
         raise PredictorError("Vertical wind was requested, but this dataset does not provide it.")
@@ -39,6 +43,8 @@ def run_flight(request, weather, wind_bias=(0, 0)):
         raise PredictorError(f"Launch altitude is below ground ({launch_ground:.0f} m AMSL). Increase launch altitude.")
 
     def velocity(s, seconds):
+        if cancel_check:
+            cancel_check()
         if abs(s[0]) > 85:
             raise CoverageError("This integrator supports latitudes between 85°S and 85°N.")
         sample = weather.sample(s[0], s[1], s[2], start + timedelta(seconds=seconds))
@@ -130,9 +136,11 @@ def run_flight(request, weather, wind_bias=(0, 0)):
     raise PredictorError("Flight did not reach its endpoint within the maximum duration. Increase it or revise flight rates.")
 
 
+@scoped_prediction
 def predict(request, weather, progress=None):
     weather = flight_weather(weather, request)
-    result = run_flight(request, weather)
+    check = getattr(progress, "check_cancelled", None)
+    result = run_flight(request, weather, cancel_check=check)
     physical = weather.info["physical_ground"]
     physical["launch_altitude_m"] = request.launch_altitude
     physical["physical_ground_m"] = weather.launch_ground()
@@ -166,7 +174,7 @@ def predict(request, weather, progress=None):
                        "ensemble_members": 0}
             member = request.model_copy(update=updates)
             try:
-                flight = run_flight(member, weather, rng.normal(0, request.wind_sigma, size=2))
+                flight = run_flight(member, weather, rng.normal(0, request.wind_sigma, size=2), cancel_check=check)
                 result["ensemble"].append({"member": i + 1, **flight})
             except PredictorError as exc:
                 failed.append({"member": i + 1, "reason": str(exc)})
@@ -188,6 +196,7 @@ def predict(request, weather, progress=None):
     return result
 
 
+@scoped_prediction
 def predict_batch(request, store, progress=None):
     """An end-exclusive launch window; preserve successes and report each failure."""
     import math
@@ -201,9 +210,9 @@ def predict_batch(request, store, progress=None):
             if progress:
                 progress(f"Launch {len(entries)+1}/{total} · {template.flight_name} · {launch:%Y-%m-%d %H:%M} UTC")
             entry = {"index":len(entries),"site_index":site,"flight_name":template.flight_name,
-                     "launch_datetime":launch.isoformat().replace("+00:00","Z")}
+                     "launch_datetime":launch.isoformat().replace("+00:00","Z"),"dataset":body.dataset}
             try:
-                entry.update(status="completed", result=predict(body,store.get(body.dataset,launch)))
+                entry.update(status="completed", result=predict(body,store.get(body.dataset,launch), progress))
             except PredictorError as exc:
                 entry.update(status="failed",error=str(exc))
                 if isinstance(exc, MissingTerrainError):

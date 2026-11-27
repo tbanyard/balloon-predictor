@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from starlette.background import BackgroundTask
 
 from . import __version__
-from .errors import MissingTerrainError, PredictorError
+from .errors import JobCancelled, MissingTerrainError, PredictorError
 from .disk import check_writable, disk_status, storage_failure
 from .exports import arrival_csv_export, csv_export, geojson, kml_export
 from .models import ArrivalPlanRequest, BatchPredictionRequest, DownloadRequest, PredictionRequest, ModelBoxRequest, CleanupRequest, TerrainDownloadRequest, SondeExportRequest, WeatherOverlayRequest
@@ -44,6 +44,7 @@ class Jobs:
         self.executor = executor or ThreadPoolExecutor(max_workers=settings.workers)
         self.records = {}
         self.submissions = {}
+        self.controls = {}
         self.lock = threading.RLock()
 
     def submit(self, kind, task, key=None):
@@ -56,10 +57,11 @@ class Jobs:
             if sum(r["status"] in ("queued", "running") for r in self.records.values()) >= 16:
                 raise HTTPException(429, "Job queue is full. Wait for a running job to finish.")
             while len(self.records) >= 100:
-                completed = next((key for key, value in self.records.items() if value["status"] in ("completed", "failed")), None)
+                completed = next((key for key, value in self.records.items() if value["status"] in ("completed", "failed", "cancelled")), None)
                 if completed is None:
                     break
                 del self.records[completed]
+                self.controls.pop(completed, None)
             lease = activity(self.settings)
             lease.__enter__()
             job_id = uuid.uuid4().hex
@@ -67,20 +69,31 @@ class Jobs:
                 while len(self.submissions)>=1000:self.submissions.pop(next(iter(self.submissions)))
                 self.submissions[key[0]]=(key[1],job_id)
             self.records[job_id] = {"id": job_id, "kind": kind, "status": "queued", "message": "Queued"}
+            cancelled = threading.Event()
+            self.controls[job_id] = {"event": cancelled, "future": None}
+        def check_cancelled():
+            if cancelled.is_set():
+                raise JobCancelled()
         def update(message):
+            check_cancelled()
             with self.lock:
                 self.records[job_id].update(message=message, stage=message)
+        update.check_cancelled = check_cancelled
         def run():
             with self.lock:
                 self.records[job_id]["status"] = "running"
             try:
+                check_cancelled()
                 result = task(update)
+                check_cancelled()
                 if kind == "prediction":
                     result["id"] = job_id
                     atomic_json(self.settings.data_dir / "results" / (job_id + ".json"), result)
                 if kind == "export":
                     atomic_json(self.settings.data_dir / "exports" / (job_id + ".json"), result)
                 outcome = dict(status="completed", message="Complete", result=result)
+            except JobCancelled:
+                outcome = dict(status="cancelled", message="Calculation cancelled")
             except Exception as exc:
                 self.log_failure(job_id, kind, exc)
                 log = f"Server log: {self.settings.log_path} (job {job_id})."
@@ -99,14 +112,41 @@ class Jobs:
                 self.log_failure(job_id, kind, exc)
             with self.lock:
                 # Publish the terminal state only after releasing its lease.
+                if cancelled.is_set():
+                    outcome = dict(status="cancelled", message="Calculation cancelled")
                 self.records[job_id].update(outcome)
+                # Large map rasters are disposable. Keep only eight completed
+                # WRF rasters; prediction results/history are unaffected.
+                rasters = [k for k,v in self.records.items() if isinstance(v.get("result"), dict) and v["result"].get("wrf_native") and v["status"] == "completed"]
+                for old in rasters[:-8]:
+                    del self.records[old]
+                    self.controls.pop(old, None)
         try:
             future = self.executor.submit(run)
-            future.add_done_callback(lambda f: lease.__exit__(None, None, None) if f.cancelled() else None)
+            with self.lock:
+                self.controls[job_id]["future"] = future
+            def queued_cancel(f):
+                if f.cancelled():
+                    lease.__exit__(None, None, None)
+                    with self.lock:
+                        self.records[job_id].update(status="cancelled", message="Calculation cancelled")
+            future.add_done_callback(queued_cancel)
         except Exception:
             lease.__exit__(None, None, None)
             raise
         return {"id": job_id, "status": "queued"}
+
+    def cancel(self, job_id):
+        with self.lock:
+            record = self.get(job_id)
+            if record["status"] in ("queued", "running"):
+                control = self.controls.get(job_id)
+                if control:
+                    control["event"].set()
+                    self.records[job_id]["message"] = "Cancelling calculation…"
+                    if control["future"]:
+                        control["future"].cancel()
+            return self.get(job_id)
 
     def log_failure(self, job_id, kind, error):
         # Log stage, exception type and stack locations without response bodies,
@@ -491,6 +531,11 @@ def create_app(settings=None, executor=None):
     def get_job(job_id: str):
         return jobs.get(job_id)
 
+    @app.post("/api/jobs/{job_id}/cancel")
+    def cancel_job(job_id: str):
+        job = jobs.cancel(job_id)
+        return {"id": job_id, "status": job["status"], "message": job["message"]}
+
     @app.get("/api/predictions/{job_id}/export/{format}")
     def export(job_id: str, format: str):
         job = jobs.get(job_id)
@@ -523,7 +568,7 @@ def configured_app():
     settings = Settings.load()
     if settings.shared_server:
         from .multiuser import SharedServer
-        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8009")))
+        return SharedServer(settings, int(os.environ.get("BP_SERVER_PORT", "8011")))
     return create_app(settings)
 
 

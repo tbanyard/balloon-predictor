@@ -47,9 +47,11 @@ def geojson(result):
         for entry in result["flights"]:
             if entry["status"]!="completed": continue
             for feature in geojson(entry["result"])["features"]:
-                feature["properties"].update(flight_index=entry["index"],flight_name=entry["flight_name"],launch_datetime=entry["launch_datetime"])
+                feature["properties"].update(flight_index=entry["index"],flight_name=entry["flight_name"],launch_datetime=entry["launch_datetime"],
+                    dataset=entry["result"]["request"]["dataset"],weather_source=entry["result"]["weather"]["source"])
                 features.append(feature)
-        return {"type":"FeatureCollection","features":features,"metadata":{"request":result["request"],
+        request = result.get("request") or {"mode":"manual","flights":[e["result"]["request"] for e in result["flights"] if e["status"]=="completed"]}
+        return {"type":"FeatureCollection","features":features,"metadata":{"request":request,
                 "failed_launches":[e for e in result["flights"] if e["status"]=="failed"]}}
     features = []
     for stage in result["prediction"]:
@@ -75,12 +77,16 @@ def geojson(result):
 def csv_export(result):
     if result.get("type")=="series":
         buffer=StringIO(newline=""); writer=csv.writer(buffer)
-        writer.writerow(["flight_index","flight_name","member","stage","datetime_utc","latitude_deg","longitude_deg","altitude_m_amsl","elapsed_seconds"])
+        mixed=len({e["result"]["request"]["dataset"] for e in result["flights"] if e["status"]=="completed"})>1
+        writer.writerow(["flight_index","flight_name","member","stage","datetime_utc","latitude_deg","longitude_deg","altitude_m_amsl","elapsed_seconds"]+
+                        (["dataset","weather_source","forecast_initialization_utc"] if mixed else []))
         for entry in result["flights"]:
             if entry["status"]!="completed":continue
             rows=csv.reader(StringIO(csv_export(entry["result"])))
             next(rows)
-            for row in rows:writer.writerow([entry["index"],entry["flight_name"],*row])
+            flight=entry["result"];origin=flight["weather"].get("provenance",{})
+            source=[flight["request"]["dataset"],flight["weather"]["source"],origin.get("cycle") or origin.get("parent_cycle_utc") or origin.get("forecast_reference_time") or origin.get("run") or ""] if mixed else []
+            for row in rows:writer.writerow([entry["index"],entry["flight_name"],*row,*source])
         return buffer.getvalue()
     buffer = StringIO(newline="")
     writer = csv.writer(buffer)
@@ -100,6 +106,7 @@ def kml_export(result):
         for entry in result["flights"]:
             if entry["status"]!="completed":continue
             folder=SubElement(doc,"Folder"); SubElement(folder,"name").text=entry["flight_name"]+" · "+entry["launch_datetime"]
+            SubElement(folder,"description").text=json.dumps({"weather":entry["result"]["weather"],"request":entry["result"]["request"]})
             child=fromstring(kml_export(entry["result"]))
             for mark in child.findall(".//{http://www.opengis.net/kml/2.2}Placemark"):folder.append(mark)
         return tostring(root,encoding="utf-8",xml_declaration=True).decode()

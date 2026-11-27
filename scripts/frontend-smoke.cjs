@@ -37,6 +37,7 @@ const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
     const html = fs.readFileSync("frontend/index.html", "utf8").replace(/<script[^>]+src=[^>]+><\/script>/g, "");
     dom = new JSDOM(html, { url: base, runScripts: "outside-only", pretendToBeVisual: true, virtualConsole: console });
     const window = dom.window;
+    window.AbortController = AbortController;
     window.fetch = (url, options) => fetch(new URL(url, base), options);
     const downloads=[];
     window.HTMLAnchorElement.prototype.click=function(){downloads.push({url:this.href,filename:this.download});};

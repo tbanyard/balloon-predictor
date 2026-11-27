@@ -16,6 +16,10 @@ class WeatherOverlayRequest(StrictModel):
     altitude_m: float | None = Field(default=None, ge=-500, le=100000)
     pressure_hpa: float | None = Field(default=None, gt=0, le=1100)
     grid_size: int = Field(default=40, ge=8, le=48)
+    wrf_detail: bool = False
+    include_vertical_velocity: bool = False
+    viewport_width: int = Field(default=640, ge=8, le=2048)
+    viewport_height: int = Field(default=480, ge=8, le=2048)
 
     @model_validator(mode="after")
     def one_vertical_coordinate(self):

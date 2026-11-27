@@ -57,7 +57,7 @@ def build_parser():
     sub = parser.add_subparsers(dest="command", required=True)
     serve = sub.add_parser("serve", help="Start the local map and API")
     serve.add_argument("--host", default="127.0.0.1")
-    serve.add_argument("--port", type=int, default=8009)
+    serve.add_argument("--port", type=int, default=8011)
     serve.add_argument("--reload", action="store_true")
     serve.add_argument("--config",dest="serve_config",help="Personal configuration YAML")
     serve.add_argument("--era5-root",help="Local ERA5 viewer archive directory")

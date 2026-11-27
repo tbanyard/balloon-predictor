@@ -127,7 +127,7 @@ public final class MainActivity extends Activity {
         LinearLayout ports=new LinearLayout(this);sshFields.addView(ports);LinearLayout a=column(),b=column();
         ports.addView(a,new LinearLayout.LayoutParams(0,-2,1));ports.addView(b,new LinearLayout.LayoutParams(0,-2,1));
         sshPort=field(a,"SSH port","22",prefs.getString("ssh_port","22"),InputType.TYPE_CLASS_NUMBER);
-        webPort=field(b,"BalloonPredictor port","8008",prefs.getString("web_port","8008"),InputType.TYPE_CLASS_NUMBER);
+        webPort=field(b,"BalloonPredictor port","8011",prefs.getString("web_port","8011"),InputType.TYPE_CLASS_NUMBER);
         sshFields.addView(text("The server asks for a password or sign-in code when required. Passwords aren’t saved.",14));
         offlineHint=text("Open a saved .bpforecast file to calculate a flight on this phone. You can prepare a pack on the server before you lose signal.",14);
         connectionOptions.addView(offlineHint);
@@ -390,7 +390,7 @@ public final class MainActivity extends Activity {
                     if(item.name.startsWith("download"))item.name=item.mime.equals("text/csv")?"offline-balloon-flight.csv":
                         item.mime.contains("geo+json")?"offline-balloon-flight.geojson":"balloon-launch-setups.json";
                     view.evaluateJavascript("(()=>{const name=window.__bpExportFilename||null;delete window.__bpExportFilename;return name})()",filename->{
-                        try{if(filename!=null&&!"null".equals(filename)){String name=new JSONArray("["+filename+"]").getString(0);if(name.length()<=160&&!name.contains("/")&&!name.contains("\\"))item.name=name;}}catch(Exception ignored){}
+                        try{if(filename!=null&&!"null".equals(filename)){String name=new JSONArray("["+filename+"]").getString(0);if(name.length()<=240&&!name.contains("/")&&!name.contains("\\"))item.name=name;}}catch(Exception ignored){}
                         chooseSave(item);
                     });
                 }catch(Exception e){toast("Could not read the saved flight export.");}

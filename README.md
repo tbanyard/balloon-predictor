@@ -1,21 +1,22 @@
-# BalloonPredictor v1.6.4
+# BalloonPredictor v1.6.6
 
-See [v1.6.4 and the shared server setup](docs/V1.6.4.md), including editable UTC dates, selectable tracks, retained desktop flight sessions and personal workspaces.
+See [v1.6.6 and the shared server setup](docs/V1.6.6.md), including editable UTC dates, selectable tracks, retained desktop flight sessions and personal workspaces.
 
 A complete local balloon-prediction application: a Leaflet map, Python API,
 weather downloads/imports, a trajectory engine, sensitivity runs, and exports.
-Runs on your computer at **http://localhost:8009**. On the shared Linux server, use
-`bash start-shared-server.sh --port 8009` after stopping the old server.
+Runs on your computer at **http://localhost:8011**. On the shared Linux server, use
+`bash start-shared-server.sh --port 8011` on a free port. The previous server can keep using 8010.
 This uses `/data1/tim/BP_Data/<SSH username>` for each person's workspace.
 The launcher puts its virtual environment, temporary files and pip cache on the same data volume.
-Open the server's port 8009 in your browser and sign in with your normal server
+Open the server's port 8011 in your browser and sign in with your normal server
 username and password. There is no command or timed link to generate.
 
-v1.6.4 adds quiet SSH recovery with a retained flight page, portable saved
-flights and local recent history, additional launches, shared WRF/IFS/GFS weather
-folders, converted SkySight WRF support, and an improved Android offline map.
-Weather colours default to the visible window. See the guide for the wind-frame
-setting and installer prepare/release commands.
+v1.6.6 speeds up native WRF predictions with retained file handles and cached
+three-dimensional blocks, preserving the model resolution and flight physics.
+Weather adds vertical velocity where available and clearer wind animation at
+wide zoom. Added launches can compare different model runs at the same point,
+with full-date/model labels and aligned date/time controls. Existing save,
+reconnection, window and export features remain available.
 
 Start with [QUICKSTART.md](QUICKSTART.md). Version 1.4 gives the panels consistent
 names, clearer ground settings, an orange balloon loading animation, independent
@@ -47,7 +48,7 @@ it does not turn ERA5 into a future forecast.
 ## Start here
 
 Install **Python 3.12 or newer**, extract the ZIP, and open a terminal inside
-the extracted balloon-predictor-v1.6.4 directory. Initial installation needs internet
+the extracted balloon-predictor-v1.6.6 directory. Initial installation needs internet
 access. The Linux/macOS launcher uses a per-user environment under
 `~/.cache/balloon-predictor/venv`, or reuses an explicitly activated environment.
 On Linux with `/data1/tim/BP_Data` mounted, generated data defaults to a username
@@ -77,7 +78,7 @@ To run the server from source, use PowerShell:
 
 If your PowerShell policy blocks the script, use the manual commands below.
 The scripts install the tested dependency snapshot on the first run and then
-start the server. Open **http://localhost:8009** and click **Calculate flight**
+start the server. Open **http://localhost:8011** and click **Calculate flight**
 to use the selected ERA5 archive. To try without local data, choose
 **Demo · synthetic winds** explicitly. Press Ctrl+C to stop the server.
 
@@ -375,7 +376,7 @@ balloon-predictor predict examples/flight-demo.yml --output data/results/demo-fl
 The output prefix produces .json, .csv, .geojson and .kml files. API predictions
 are also saved in data/results/ and remain exportable after a server restart.
 
-API reference: **http://localhost:8009/docs**
+API reference: **http://localhost:8011/docs**
 
 | Endpoint | Purpose |
 |---|---|
@@ -394,7 +395,7 @@ for every Tawhiri endpoint, profile or error schema.
 Example:
 
 ~~~bash
-curl -X POST http://localhost:8009/predict \
+curl -X POST http://localhost:8011/predict \
   -H "Content-Type: application/json" \
   -d '{"dataset":"demo","launch_datetime":"2024-01-15T12:00:00Z","launch_latitude":52.817208,"launch_longitude":355.875,"launch_altitude":100,"ascent_rate":2,"burst_altitude":25000,"descent_rate":5}'
 ~~~

@@ -61,6 +61,18 @@ public final class FlightTest extends Instrumentation {
             waitFor(()->("\""+expected+"\"").equals(js(original,"window.__workspaceUser||''")),"verified personal workspace");
             js(original,"(()=>{document.querySelector('#flight_name').value='Keep this flight';document.querySelector('#flight_mode').value='ascent';document.querySelector('#burst_altitude').value='1000';document.querySelector('#ascent_rate').value='5';document.querySelector('#predict-button').click()})()");
             waitFor(()->"true".equals(js(original,"document.querySelector('#flight-status').textContent.startsWith('Flight complete')")),"flight");
+            check("true".equals(js(original,"document.querySelector('.series-launch').textContent.includes(' UTC · DEMO') && /^\\d{4}-/.test(document.querySelector('.series-launch').textContent)")),"Full-date/model launch label is missing");
+            check("true".equals(js(original,"document.querySelector('#weather-overlay-field option[value=w]').disabled===false")),"Available vertical velocity is disabled");
+            js(original,"document.querySelector('.launch-add').click();document.querySelector('#add-launch-open').click()");
+            check("true".equals(js(original,"(()=>{const e=document.querySelector('.additional-date-field'),label=e.querySelector(':scope > label').getBoundingClientRect(),fields=e.querySelector('.utc-datetime').getBoundingClientRect();return label.bottom<=fields.top+1&&fields.right<=e.getBoundingClientRect().right+1&&document.querySelector('#additional-weather-source').value==='demo'})()")),"Additional-launch model controls or date alignment are incorrect");
+            js(original,"document.querySelector('#cancel-additional-launch').click()");
+            // Exercise the real native history endpoint, including its fresh
+            // empty object, and a File-based saved-flight import in WebView.
+            js(original,"BalloonFlights.update(BalloonFlights.pack(sites,activeId),true).then(()=>BalloonFlights.load()).then(v=>window.__bpHistoryOK=Array.isArray(v.recent)&&v.recent.length>0)");
+            waitFor(()->"true".equals(js(original,"window.__bpHistoryOK===true")),"native saved-flight history");
+            js(original,"(()=>{const transfer=new DataTransfer();transfer.items.add(new File([JSON.stringify(BalloonFlights.pack(sites,activeId))],'test.bpflight',{type:'application/json'}));const input=document.querySelector('#open-flight');input.files=transfer.files;input.dispatchEvent(new Event('change'));})()");
+            waitFor(()->"true".equals(js(original,"document.querySelector('#flight-status').textContent.startsWith('Saved flights opened')&&!document.querySelector('#flight-result').hidden")),"saved-file import without recalculation");
+            check("true".equals(js(original,"document.querySelectorAll('.launch-delete').length===1 && !document.querySelector('.launch-add').disabled")),"Saved launch controls are unavailable");
             js(original,"window.__bpRecoveryMarker='same document'");
             java.lang.reflect.Field sessionField=MainActivity.class.getDeclaredField("session");sessionField.setAccessible(true);
             ServerSession outer=(ServerSession)sessionField.get(app);RecoveryGateway gateway=outer.gateway;
@@ -98,7 +110,7 @@ public final class FlightTest extends Instrumentation {
             js(offline,"document.querySelector('#calculate').click()");
             waitFor(()->"true".equals(js(offline,"document.querySelector('#result').hidden===false")),"locally calculated flight");
             check("true".equals(js(offline,"document.querySelector('#status').textContent.includes('on this phone')")),"Offline solver was not used");
-            result.putString("stream","\nBP_ANDROID_PASS: personal SSH workspace, automatic/deferred SSH recovery with stable origin and retained flight, rescan, one header, Local/Server choices, both return paths, and an offline forecast flight.\n");
+            result.putString("stream","\nBP_ANDROID_PASS: personal SSH workspace, native saved history and file import, launch controls, automatic/deferred SSH recovery with stable origin and retained flight, rescan, one header, Local/Server choices, both return paths, and an offline forecast flight.\n");
             runOnMainSync(app::finish);finish(Activity.RESULT_OK,result);
         }catch(Throwable error){
             result.putString("stream","\nBP_ANDROID_FAIL: "+android.util.Log.getStackTraceString(error));

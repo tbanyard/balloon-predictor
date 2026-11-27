@@ -29,7 +29,9 @@ def validate_result(value):
         # These are receipts, never supplied file contents. Exporters also
         # check them against the source before accessing registered weather.
         for entry in data.get('input_manifest',[]):
-            if not isinstance(entry['path'],str) or len(entry['path'])>4096 or not isinstance(entry['size'],int) or not isinstance(entry['mtime_ns'],int):raise ValueError()
+            stamp=entry['mtime_ns']
+            if not isinstance(stamp,int) and not (isinstance(stamp,str) and 1<=len(stamp)<=25 and stamp.lstrip('-').isdigit()):raise ValueError()
+            if not isinstance(entry['path'],str) or len(entry['path'])>4096 or not isinstance(entry['size'],int):raise ValueError()
     try:
         if not isinstance(value,dict):raise ValueError()
         if 'flights' in value:

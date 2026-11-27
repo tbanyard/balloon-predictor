@@ -60,6 +60,7 @@ def export_forecast_pack(result, store, progress):
                           "source":weather.info["source"], "created":datetime.now(timezone.utc).isoformat(),
                           "lat":weather.lat[ys,0].tolist(), "lon":lons.tolist(), "time":weather.times[times].tolist(),
                           "levels":nl, "fields":blocks, "setup":setup,
+                          "provenance":{k:v for k,v in weather.info.get("provenance",{}).items() if k in ("cycle","run","domain","parent_cycle_utc","forecast_reference_time")},
                           "gap_seconds":store.settings.max_time_gap_hours*3600}
                 metadata = json.dumps(header, ensure_ascii=False, allow_nan=False, separators=(",",":")).encode()
                 if len(metadata)>64*1024:

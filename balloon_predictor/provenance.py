@@ -36,7 +36,13 @@ def snapshot(weather):
     if catalog:
         paths.extend(catalog.root / p for p in weather.info.get("physical_ground", {}).get("tiles", []))
     recorded = getattr(weather, "source_receipts", {})
-    return [recorded.get(str(p.resolve()), receipt(p)) for p in sorted(set(paths))]
+    # Nanosecond timestamps exceed JavaScript's exact integer range. Results
+    # cross a browser on export/import, so preserve these receipts losslessly.
+    entries = []
+    for path in sorted(set(paths)):
+        entry = recorded.get(str(path.resolve())) or receipt(path)
+        entries.append({**entry, "mtime_ns": str(entry["mtime_ns"])})
+    return entries
 
 
 def validate_manifest(result):
@@ -44,5 +50,5 @@ def validate_manifest(result):
         raise PredictorError("This saved prediction predates source verification. Re-run it with v1.3 before exporting sampled data.")
     for entry in result["input_manifest"]:
         path = Path(entry["path"])
-        if not path.is_file() or path.stat().st_size != entry["size"] or path.stat().st_mtime_ns != entry["mtime_ns"]:
+        if not path.is_file() or path.stat().st_size != entry["size"] or path.stat().st_mtime_ns != int(entry["mtime_ns"]):
             raise PredictorError(f"Source file changed or was removed: {path.name}. Re-run the prediction before exporting model data.")
